@@ -1,3 +1,2 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = { reactStrictMode: true };
-module.exports = nextConfig;
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
