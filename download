@@ -1,0 +1,16 @@
+# Copy this file to ".env.local" and fill in the values from your Supabase project.
+# (Supabase dashboard -> Project Settings -> API)
+
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
+
+# Service role key — SECRET. Only used on the server to create/delete login IDs.
+# Never expose this in the browser. (Supabase -> Settings -> API -> service_role)
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Optional: enables AI-written Final Observation & Principal Summary.
+# If left blank, the system uses its built-in deterministic narrative (still fully works).
+ANTHROPIC_API_KEY=
+
+# The fake email domain used to turn simple login IDs into auth emails. Leave as-is.
+NEXT_PUBLIC_ID_DOMAIN=nqas.local
