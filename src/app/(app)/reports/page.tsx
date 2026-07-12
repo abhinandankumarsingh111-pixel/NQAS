@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
 import { BAND_ORDER } from "@/lib/observations";
-import { bandChip } from "@/components/ReportView";
+import { bandColor } from "@/lib/observations";
 
 const worse = (a: string, b: string) => (BAND_ORDER.indexOf(a as never) >= BAND_ORDER.indexOf(b as never) ? a : b);
 
@@ -32,7 +32,7 @@ export default async function ReportsPage() {
                     <span className="muted"> · {r.teacher} · {r.date}</span>
                     <div className="muted" style={{ fontSize: 12 }}>{campusName(r.campus_id)} · {r.sample_size} sample{r.sample_size > 1 ? "s" : ""}</div>
                   </div>
-                  {bandChip(worst)}
+                  <span className="band" style={{ background: bandColor(worst) }}>{worst}</span>
                 </div>
               </Link>
             );
