@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
 import { BAND_ORDER, BAND_META } from "@/lib/observations";
-import { bandChip } from "@/components/ReportView";
+import { bandColor } from "@/lib/observations";
 
 const worseIndex = (a: string, b: string) => (BAND_ORDER.indexOf(a as never) >= BAND_ORDER.indexOf(b as never) ? a : b);
 
@@ -88,7 +88,7 @@ export default async function Dashboard() {
                       <span className="muted"> · {r.teacher}</span>
                       <div className="muted" style={{ fontSize: 12 }}>{campusName(r.campus_id)} · {r.date} · by {r.coordinator_name} · {r.sample_size} sample{r.sample_size > 1 ? "s" : ""}</div>
                     </div>
-                    {bandChip(worst)}
+                    <span className="band" style={{ background: bandColor(worst) }}>{worst}</span>
                   </div>
                 </Link>
               );
