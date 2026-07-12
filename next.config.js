@@ -1,6 +1,3 @@
-node_modules
-.next
-.env.local
-.env
-.DS_Store
-*.log
+/** @type {import('next').NextConfig} */
+const nextConfig = { reactStrictMode: true };
+module.exports = nextConfig;
