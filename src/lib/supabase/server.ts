@@ -10,7 +10,7 @@ export function createClient() {
     {
       cookies: {
         getAll() { return cookieStore.getAll(); },
-        setAll(list) {
+        setAll(list: { name: string; value: string; options?: Record<string, unknown> }[]) {
           try { list.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); }
           catch { /* called from a Server Component: safe to ignore, middleware refreshes */ }
         },
