@@ -90,3 +90,8 @@ export const BAND_META: Record<Band, { color: string; tone: string }> = {
   "Major Concern": { color: "#C4581B", tone: "a matter of concern" },
   Critical: { color: "#A32020", tone: "in need of immediate corrective action" },
 };
+// Small render helper usable by both server and client components.
+export function bandColor(b: string): string {
+  const meta = BAND_META as Record<string, { color: string }>;
+  return meta[b]?.color || "#5b616e";
+}
