@@ -11,12 +11,20 @@ function SubmitBtn({ className, label, busy }: { className: string; label: strin
   return <button className={className} disabled={pending}>{pending ? busy : label}</button>;
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner", management: "Management", principal: "Principal", coordinator: "Coordinator",
+};
+
 export default function AdminClient({ campuses, users, myId }: { campuses: Campus[]; users: UserRow[]; myId: string }) {
   const [tab, setTab] = useState<"users" | "campuses">("users");
   const [userState, userAction] = useFormState(createUserAction, null as { error?: string; ok?: string } | null);
   const [campusState, campusAction] = useFormState(addCampusAction, null as { error?: string; ok?: string } | null);
   const [role, setRole] = useState("coordinator");
+  const [showPw, setShowPw] = useState(false);
   const campusName = (id: string | null) => campuses.find((c) => c.id === id)?.name;
+
+  // Coordinator and Principal are both campus-locked roles.
+  const needsCampus = role === "coordinator" || role === "principal";
 
   return (
     <div>
@@ -36,10 +44,11 @@ export default function AdminClient({ campuses, users, myId }: { campuses: Campu
                 <label className="label">Role</label>
                 <select className="input" name="role" value={role} onChange={(e) => setRole(e.target.value)}>
                   <option value="coordinator">Coordinator</option>
-                  <option value="management">Management</option>
+                  <option value="principal">Principal (one campus)</option>
+                  <option value="management">Management (all campuses)</option>
                 </select>
               </div>
-              {role === "coordinator" && (
+              {needsCampus && (
                 <div className="grow">
                   <label className="label">Campus (access limited to this)</label>
                   <select className="input" name="campusId" defaultValue={campuses[0]?.id}>
@@ -47,7 +56,13 @@ export default function AdminClient({ campuses, users, myId }: { campuses: Campu
                   </select>
                 </div>
               )}
-              <div className="grow"><label className="label">Initial Password (min 6)</label><input className="input" name="password" /></div>
+              <div className="grow">
+                <label className="label">Initial Password (min 6)</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input className="input" name="password" type={showPw ? "text" : "password"} style={{ flex: 1 }} />
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowPw(!showPw)}>{showPw ? "Hide" : "Show"}</button>
+                </div>
+              </div>
             </div>
             {userState?.error && <div className="err">{userState.error}</div>}
             {userState?.ok && <div className="ok">{userState.ok}</div>}
@@ -60,7 +75,10 @@ export default function AdminClient({ campuses, users, myId }: { campuses: Campu
               <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid var(--line-soft)", gap: 8, flexWrap: "wrap" }}>
                 <div>
                   <b style={{ color: "var(--navy)", fontSize: 14 }}>{u.name}</b> <span className="muted">({u.login_id})</span>
-                  <div className="muted" style={{ fontSize: 12 }}>{u.role}{u.campus_id ? ` · ${campusName(u.campus_id)}` : u.role === "management" ? " · all campuses (read)" : " · full control"}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {ROLE_LABEL[u.role] || u.role}
+                    {u.campus_id ? ` · ${campusName(u.campus_id)}` : u.role === "management" ? " · all campuses (read)" : " · full control"}
+                  </div>
                 </div>
                 {u.id !== myId && (
                   <form action={async () => { await deleteUserAction(u.id); }}>

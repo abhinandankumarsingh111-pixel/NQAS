@@ -17,7 +17,7 @@ function wordHTML(r: ReportData) {
   const rows = r.students.map((s) =>
     `<tr><td style="border:1px solid #ccc;padding:6px;">${esc(s.name || "—")}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.days == null ? "—" : s.days}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${esc(s.cpi)}</td><td style="border:1px solid #ccc;padding:6px;">${esc(s.remark)}</td></tr>`).join("");
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;color:#20242e;">
-  <div style="background:#1B2A4A;color:#fff;padding:14px 18px;"><div style="font-size:18px;font-weight:bold;">Krishna Vikash Group of Schools</div><div style="font-size:12px;color:#cdd5e5;">${esc(r.meta.campus)}</div></div>
+  <div style="background:#1B2A4A;color:#fff;padding:14px 18px;"><div style="font-size:18px;font-weight:bold;">Krishna Vikash Group of Institutions</div><div style="font-size:12px;color:#cdd5e5;">${esc(r.meta.campus)}</div></div>
   <h2 style="text-align:center;color:#1B2A4A;margin:16px 0 4px;">Notebook Verification Report</h2>
   <table style="width:100%;font-size:13px;margin:10px 0;"><tr><td><b>Teacher:</b> ${esc(r.academic.teacher)}</td><td><b>Class:</b> ${esc(r.academic.cls)}</td><td><b>Subject:</b> ${esc(r.academic.subject)}</td></tr>
   <tr><td><b>Date:</b> ${esc(r.meta.date)}</td><td><b>Coordinator:</b> ${esc(r.meta.coordinatorName)}</td><td><b>Samples:</b> ${r.students.length}</td></tr></table>
@@ -55,7 +55,7 @@ export default function ReportView({ r }: { r: ReportData }) {
       </div>
       <div className="report report-print">
         <div className="report-hd">
-          <div style={{ fontSize: 17, fontWeight: 700 }}>Krishna Vikash Group of Schools</div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>Krishna Vikash Group of Institutions</div>
           <div style={{ fontSize: 12, color: "#cdd5e5" }}>{r.meta.campus}</div>
         </div>
         <div className="report-body">

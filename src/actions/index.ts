@@ -55,7 +55,7 @@ export async function setupAction(_prev: unknown, formData: FormData) {
   redirect("/dashboard");
 }
 
-// ---------- OWNER: create a management/coordinator ID ----------
+// ---------- OWNER: create a management/principal/coordinator ID ----------
 export async function createUserAction(_prev: unknown, formData: FormData) {
   const { profile } = await getProfile();
   if (profile?.role !== "owner") return { error: "Not authorised." };
@@ -66,16 +66,19 @@ export async function createUserAction(_prev: unknown, formData: FormData) {
   const password = String(formData.get("password") || "");
   const campus_id = String(formData.get("campusId") || "") || null;
 
+  // Coordinator and Principal are both campus-locked roles and require a campus.
+  const needsCampus = role === "coordinator" || role === "principal";
+
   if (!name || !id) return { error: "Name and login ID are required." };
   if (password.length < 6) return { error: "Password must be at least 6 characters." };
-  if (role === "coordinator" && !campus_id) return { error: "Choose a campus for the coordinator." };
+  if (needsCampus && !campus_id) return { error: "Choose a campus for this role." };
 
   const admin = adminClient();
   const { error } = await admin.auth.admin.createUser({
     email: idToEmail(id),
     password,
     email_confirm: true,
-    user_metadata: { name, role, login_id: id, campus_id: role === "coordinator" ? campus_id : "" },
+    user_metadata: { name, role, login_id: id, campus_id: needsCampus ? campus_id : "" },
   });
   if (error) return { error: error.message.includes("already") ? "That login ID already exists." : error.message };
 
@@ -139,4 +142,18 @@ export async function saveReportAction(report: {
   if (error) return { error: error.message };
   revalidatePath("/reports");
   return { ok: true, id: data.id };
+}
+
+// ---------- OWNER: delete a stored report ----------
+// Always returns the same shape so client-side handling is trivial and safe.
+export async function deleteReportAction(reportId: string): Promise<{ ok: boolean; error?: string }> {
+  const { profile } = await getProfile();
+  if (profile?.role !== "owner") return { ok: false, error: "Only the owner can delete reports." };
+  // Service-role client bypasses RLS; caller verified as owner above.
+  const admin = adminClient();
+  const { error } = await admin.from("reports").delete().eq("id", reportId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/dashboard");
+  revalidatePath("/reports");
+  return { ok: true };
 }
