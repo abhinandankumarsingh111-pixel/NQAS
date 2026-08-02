@@ -1,5 +1,6 @@
 :root {
-  --navy: #1B2A4A; --navy2: #1C3D5A; --teal: #1C5A6B; --teal2: #2E9E9E;
+  /* Krishna Vikash Group of Institutions — exact colors sampled from the official logo. */
+  --navy: #0A3F6B; --navy2: #0A3F6B; --teal: #026874; --teal2: #2E9E9E;
   --orange: #E07B1A; --paper: #F4F4EF; --panel: #fff; --ink: #22262f;
   --sub: #5b616e; --line: #d9d9d0; --line-soft: #eaeae2; --chip: #f2f2ec; --red: #A32020;
 }

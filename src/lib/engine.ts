@@ -2,8 +2,8 @@
 // This is the component the whole product is built around.
 
 import {
-  OBS_BY_ID, RECOMMENDATIONS, BAND_ORDER, BAND_META, IMPACT_WEIGHT,
-  CATEGORIES, type Band,
+  OBS_BY_ID, RECOMMENDATIONS, CATEGORIES,
+  type ClassBand, type StatusTag, dayStatus, STATUS_META, worseTag,
 } from "./observations";
 
 export interface StudentInput {
@@ -15,11 +15,10 @@ export interface StudentInput {
 export interface StudentResult {
   name: string;
   days: number | null;
-  cpi: "Consistent" | "Irregular" | "Not evidenced";
-  band: Band;
+  statusTag: StatusTag;
   remark: string;
 }
-export interface Academic { teacher: string; cls: string; subject: string }
+export interface Academic { teacher: string; cls: string; subject: string; classBand: ClassBand }
 export interface ReportMeta { campus: string; coordinatorName: string; date: string }
 export interface Report {
   meta: ReportMeta;
@@ -31,9 +30,6 @@ export interface Report {
   engine: "ai" | "deterministic";
 }
 
-const worseOf = (a: Band, b: Band): Band =>
-  BAND_ORDER.indexOf(a) >= BAND_ORDER.indexOf(b) ? a : b;
-
 export function daysSince(last: string, ref: string): number | null {
   if (!last || !ref) return null;
   const a = new Date(last), b = new Date(ref);
@@ -41,30 +37,32 @@ export function daysSince(last: string, ref: string): number | null {
   return Math.max(0, Math.round((+b - +a) / 86_400_000));
 }
 
-export function rulesEngine(ids: string[], days: number | null): { band: Band; cpi: StudentResult["cpi"] } {
+// ---------------------------------------------------------------------------
+// NVS v1.0 status cascade. Priority order (highest to lowest):
+//   1. Critical  — any critical-impact observation selected, OR no last-
+//      checked date at all (i.e. not checked this session).
+//   2. Superficial — checking exists but is cursory.
+//   3. Documentation Issue — any negative Documentation-category observation.
+//   4. Index Missing — any negative Index-category observation.
+//   5. Otherwise, the day-based status for the selected class band.
+// A later check never overrides an earlier one — this function returns as
+// soon as it finds a match, so the priority is structural, not just a label.
+// ---------------------------------------------------------------------------
+export function statusTag(ids: string[], days: number | null, classBand: ClassBand): StatusTag {
   const sel = ids.map((i) => OBS_BY_ID[i]).filter(Boolean);
-  const negs = sel.filter((o) => o.pol === "negative");
-  const pos = sel.filter((o) => o.pol === "positive");
 
-  let nw = 0; negs.forEach((o) => (nw += IMPACT_WEIGHT[o.impact]));
-  let red = 0; pos.forEach((_, i) => (red += 0.6 * Math.pow(0.7, i)));
-  const sc = Math.max(0, nw - red);
+  const hasCritical = sel.some((o) => o.impact === "critical") || days == null;
+  if (hasCritical) return "Critical";
 
-  let crit = 0; sel.forEach((o) => { if (o.crit) crit = Math.max(crit, o.crit); });
+  if (ids.includes("CQ.superficial")) return "Superficial";
 
-  let band: Band =
-    sc <= 0.01 ? "Excellent" : sc <= 2 ? "Satisfactory" : sc <= 5 ? "Needs Improvement" : sc <= 9 ? "Major Concern" : "Critical";
-  if (negs.length && band === "Excellent") band = "Satisfactory";
-  if (crit === 2) band = "Critical";
-  else if (crit === 1) band = worseOf(band, "Major Concern");
+  const hasDocIssue = sel.some((o) => o.cat === "DOC" && o.pol === "negative");
+  if (hasDocIssue) return "Documentation Issue";
 
-  const notEvidenced = ids.some((i) =>
-    ["CQ.not_this_cycle", "CI.no_teacher_check", "CI.not_maintained", "CI.long_gap"].includes(i));
-  const cpi: StudentResult["cpi"] = notEvidenced
-    ? "Not evidenced"
-    : ids.includes("CQ.regular") && (days == null || days <= 12) ? "Consistent" : "Irregular";
+  const hasIndexMissing = sel.some((o) => o.cat === "IDX" && o.pol === "negative");
+  if (hasIndexMissing) return "Index Missing";
 
-  return { band, cpi };
+  return dayStatus(days, classBand);
 }
 
 export function checkConsistency(ids: string[]): string[] {
@@ -115,28 +113,27 @@ function topCats(results: StudentResult[], inputs: StudentInput[]): string[] {
     .map(([id]) => CATEGORIES.find((x) => x.id === id)!.name.toLowerCase());
 }
 
+const GOOD_TAGS = new Set<StatusTag>(["Up-to-date", "Due Soon"]);
+
 function finalTrack1(results: StudentResult[], inputs: StudentInput[], academic: Academic): string {
   const n = results.length;
-  const good = results.filter((s) => BAND_ORDER.indexOf(s.band) <= 1).length;
+  const good = results.filter((s) => GOOD_TAGS.has(s.statusTag)).length;
   const concern = n - good;
-  const anyCrit = results.some((s) => s.band === "Critical");
-  const ev = results.filter((s) => s.cpi === "Consistent").length;
-  let cp = "checking is irregular across the sample";
-  if (ev >= Math.ceil(n / 2)) cp = "checking is largely consistent";
-  else if (results.filter((s) => s.cpi === "Not evidenced").length >= Math.ceil(n / 2)) cp = "checking is not consistently evidenced";
+  const anyCritical = results.some((s) => s.statusTag === "Critical");
   const cats = topCats(results, inputs);
-  const tail = anyCrit
-    ? "One or more notebooks show critical lapses that call for immediate corrective action."
+  const tail = anyCritical
+    ? "One or more notebooks show critical lapses — with no evidence of checking in the current session — that call for immediate corrective action."
     : concern ? `The concerns centre chiefly on ${joinC(cats)} and should be addressed in the coming cycle.`
     : "Standards are being maintained and should be sustained.";
-  return `Across the ${n} notebook${n > 1 ? "s" : ""} sampled for ${academic.teacher || "the teacher"}'s ${academic.subject || "subject"} (${academic.cls || "class"}), ${cp}. ${good} of ${n} ${good === 1 ? "was" : "were"} found satisfactory or better, while ${concern} require${concern === 1 ? "s" : ""} attention. ${tail}`;
+  return `Across the ${n} notebook${n > 1 ? "s" : ""} sampled for ${academic.teacher || "the teacher"}'s ${academic.subject || "subject"} (${academic.cls || "class"}), ${good} of ${n} ${good === 1 ? "is" : "are"} up to date or due soon, while ${concern} require${concern === 1 ? "s" : ""} attention. ${tail}`;
 }
 
 function summaryTrack1(results: StudentResult[], academic: Academic, meta: ReportMeta, recs: string[]): string {
   const n = results.length;
-  const worst = results.reduce<Band>((w, s) => worseOf(w, s.band), "Excellent");
+  const worst = results.reduce<string>((w, s) => worseTag(w, s.statusTag), "Up-to-date");
   const action = recs.length ? recs[0] : "No corrective action is required at this stage.";
-  return `Notebook verification of ${academic.subject || "subject"} (${academic.cls || "class"}) under ${academic.teacher || "the teacher"} was carried out on ${meta.date} across ${n} sample${n > 1 ? "s" : ""}. Overall the notebooks are ${BAND_META[worst].tone}. ${action}`;
+  const tone = (STATUS_META as Record<string, { tone: string }>)[worst]?.tone || "in need of review";
+  return `Notebook verification of ${academic.subject || "subject"} (${academic.cls || "class"}) under ${academic.teacher || "the teacher"} was carried out on ${meta.date} across ${n} sample${n > 1 ? "s" : ""}. Overall the notebooks are ${tone}. ${action}`;
 }
 
 export function consolidateRecs(allIds: string[]): string[] {
@@ -149,8 +146,8 @@ export function consolidateRecs(allIds: string[]): string[] {
 export function buildDeterministic(meta: ReportMeta, academic: Academic, students: StudentInput[]): Report {
   const results: StudentResult[] = students.map((s, idx) => {
     const d = daysSince(s.lastChecked, meta.date);
-    const { band, cpi } = rulesEngine(s.selected, d);
-    return { name: s.name, days: d, cpi, band, remark: remarkTrack1(s, idx) };
+    const tag = statusTag(s.selected, d, academic.classBand);
+    return { name: s.name, days: d, statusTag: tag, remark: remarkTrack1(s, idx) };
   });
   const recs = consolidateRecs(students.flatMap((s) => s.selected));
   return {
@@ -165,12 +162,12 @@ export function buildDeterministic(meta: ReportMeta, academic: Academic, student
 export function aiPayload(meta: ReportMeta, academic: Academic, students: StudentInput[]) {
   return {
     campus: meta.campus, teacher: academic.teacher, class: academic.cls, subject: academic.subject,
-    date: meta.date, sampleSize: students.length,
+    classBand: academic.classBand, date: meta.date, sampleSize: students.length,
     students: students.map((s) => {
       const d = daysSince(s.lastChecked, meta.date);
-      const { band, cpi } = rulesEngine(s.selected, d);
+      const tag = statusTag(s.selected, d, academic.classBand);
       return {
-        name: s.name, daysSinceChecked: d, checkingPattern: cpi, assessment: band,
+        name: s.name, daysSinceChecked: d, status: tag,
         strengths: s.selected.map((i) => OBS_BY_ID[i]).filter((o) => o?.pol === "positive").map((o) => o.label),
         concerns: s.selected.map((i) => OBS_BY_ID[i]).filter((o) => o?.pol === "negative").map((o) => o.label),
         custom: (s.customs || []).filter(Boolean),

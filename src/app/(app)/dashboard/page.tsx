@@ -1,30 +1,49 @@
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
-import { BAND_ORDER, BAND_META } from "@/lib/observations";
+import { ALL_STATUS_ORDER, studentTag, tagColor } from "@/lib/observations";
 import ReportListItem, { type ReportRow } from "@/components/ReportListItem";
 import CampusSelect from "@/components/CampusSelect";
 
-const worseIndex = (a: string, b: string) => (BAND_ORDER.indexOf(a as never) >= BAND_ORDER.indexOf(b as never) ? a : b);
+const worseTag = (a: string, b: string) =>
+  (ALL_STATUS_ORDER.indexOf(b) > ALL_STATUS_ORDER.indexOf(a) ? b : a);
 
+// Any single report's most severe outcome, treated as a "serious concern"
+// for the summary stat card. Covers both the legacy band words and the
+// current NVS status tags.
+const SERIOUS_TAGS = new Set(["Critical", "Overdue", "Major Concern"]);
+
+type StudentRow = { statusTag?: string; band?: string };
 type Report = {
   id: string; campus_id: string | null; subject: string; class: string; teacher: string;
   date: string; coordinator_name: string; sample_size: number;
-  students: { band: string }[] | null;
+  students: StudentRow[] | null;
 };
 
 function computeStats(reps: Report[], camps: { id: string; name: string }[]) {
   const totalStudents = reps.reduce((n, r) => n + (r.students?.length || 0), 0);
   const serious = reps.reduce((n, r) =>
-    n + (r.students || []).filter((s) => s.band === "Critical" || s.band === "Major Concern").length, 0);
+    n + (r.students || []).filter((s) => SERIOUS_TAGS.has(studentTag(s))).length, 0);
   const reportingCampuses = new Set(reps.map((r) => r.campus_id)).size;
   const perCampus = camps.map((c) => ({ name: c.name, count: reps.filter((r) => r.campus_id === c.id).length }));
   const maxCampus = Math.max(1, ...perCampus.map((c) => c.count));
-  const bandCount = BAND_ORDER.map((b) => ({
-    band: b, color: BAND_META[b].color,
-    count: reps.reduce((n, r) => n + (r.students || []).filter((s) => s.band === b).length, 0),
+
+  // Tally whatever tag vocabulary actually appears in the data — old reports
+  // and new reports can coexist and both display correctly.
+  const tally: Record<string, number> = {};
+  reps.forEach((r) => (r.students || []).forEach((s) => {
+    const t = studentTag(s);
+    tally[t] = (tally[t] || 0) + 1;
   }));
-  const maxBand = Math.max(1, ...bandCount.map((b) => b.count));
-  return { totalStudents, serious, reportingCampuses, perCampus, maxCampus, bandCount, maxBand };
+  const tagCount = Object.entries(tally)
+    .sort((a, b) => ALL_STATUS_ORDER.indexOf(a[0]) - ALL_STATUS_ORDER.indexOf(b[0]))
+    .map(([tag, count]) => ({ tag, color: tagColor(tag), count }));
+  const maxTag = Math.max(1, ...tagCount.map((t) => t.count));
+
+  return { totalStudents, serious, reportingCampuses, perCampus, maxCampus, tagCount, maxTag };
+}
+
+function reportWorst(r: Report): string {
+  return (r.students || []).reduce((w: string, s: StudentRow) => worseTag(w, studentTag(s)), "Up-to-date");
 }
 
 export default async function Dashboard({ searchParams }: { searchParams: { campus?: string } }) {
@@ -53,8 +72,7 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
     const rows: ReportRow[] = reps.map((r) => ({
       id: r.id, subject: r.subject, class: r.class, teacher: r.teacher,
       campusName: campusName(r.campus_id), date: r.date, coordinator_name: r.coordinator_name,
-      sample_size: r.sample_size,
-      worst: (r.students || []).reduce((w: string, s: { band: string }) => worseIndex(w, s.band), "Excellent"),
+      sample_size: r.sample_size, worst: reportWorst(r),
     }));
 
     return (
@@ -67,14 +85,14 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
             <div className="stat"><b style={{ color: stats.serious ? "var(--red)" : "var(--navy)" }}>{stats.serious}</b><span>Serious concerns</span></div>
           </div>
           <div style={{ maxWidth: 380 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Assessment distribution</div>
-            {stats.bandCount.map((b) => (
-              <div key={b.band} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 12, width: 110, color: "var(--ink)" }}>{b.band}</span>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Status distribution</div>
+            {stats.tagCount.map((t) => (
+              <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 12, width: 130, color: "var(--ink)" }}>{t.tag}</span>
                 <div style={{ flex: 1, background: "var(--chip)", borderRadius: 4, height: 16 }}>
-                  <div style={{ width: `${(b.count / stats.maxBand) * 100}%`, background: b.color, height: "100%", borderRadius: 4 }} />
+                  <div style={{ width: `${(t.count / stats.maxTag) * 100}%`, background: t.color, height: "100%", borderRadius: 4 }} />
                 </div>
-                <span style={{ fontSize: 12, width: 20, textAlign: "right", color: "var(--sub)" }}>{b.count}</span>
+                <span style={{ fontSize: 12, width: 20, textAlign: "right", color: "var(--sub)" }}>{t.count}</span>
               </div>
             ))}
           </div>
@@ -99,8 +117,7 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
   const rows: ReportRow[] = repsForList.map((r) => ({
     id: r.id, subject: r.subject, class: r.class, teacher: r.teacher,
     campusName: campusName(r.campus_id), date: r.date, coordinator_name: r.coordinator_name,
-    sample_size: r.sample_size,
-    worst: (r.students || []).reduce((w: string, s: { band: string }) => worseIndex(w, s.band), "Excellent"),
+    sample_size: r.sample_size, worst: reportWorst(r),
   }));
 
   return (
@@ -127,14 +144,14 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
             ))}
           </div>
           <div style={{ flex: "1 1 280px", minWidth: 240 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Assessment distribution</div>
-            {stats.bandCount.map((b) => (
-              <div key={b.band} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 12, width: 110, color: "var(--ink)" }}>{b.band}</span>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Status distribution</div>
+            {stats.tagCount.map((t) => (
+              <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 12, width: 130, color: "var(--ink)" }}>{t.tag}</span>
                 <div style={{ flex: 1, background: "var(--chip)", borderRadius: 4, height: 16 }}>
-                  <div style={{ width: `${(b.count / stats.maxBand) * 100}%`, background: b.color, height: "100%", borderRadius: 4 }} />
+                  <div style={{ width: `${(t.count / stats.maxTag) * 100}%`, background: t.color, height: "100%", borderRadius: 4 }} />
                 </div>
-                <span style={{ fontSize: 12, width: 20, textAlign: "right", color: "var(--sub)" }}>{b.count}</span>
+                <span style={{ fontSize: 12, width: 20, textAlign: "right", color: "var(--sub)" }}>{t.count}</span>
               </div>
             ))}
           </div>

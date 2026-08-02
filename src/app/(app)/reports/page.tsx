@@ -1,21 +1,25 @@
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
-import { BAND_ORDER } from "@/lib/observations";
+import { ALL_STATUS_ORDER, studentTag } from "@/lib/observations";
 import ReportListItem, { type ReportRow } from "@/components/ReportListItem";
 import CampusSelect from "@/components/CampusSelect";
 
-const worse = (a: string, b: string) => (BAND_ORDER.indexOf(a as never) >= BAND_ORDER.indexOf(b as never) ? a : b);
+const worseTag = (a: string, b: string) =>
+  (ALL_STATUS_ORDER.indexOf(b) > ALL_STATUS_ORDER.indexOf(a) ? b : a);
 
 export default async function ReportsPage({ searchParams }: { searchParams: { campus?: string } }) {
   const { profile } = await getProfile();
   if (!profile) redirect("/login");
 
   const isOwner = profile.role === "owner";
-  // Coordinator and Principal are both campus-locked (enforced by RLS regardless of this UI logic).
+  // Coordinator and Principal are both campus-locked (no campus selector shown),
+  // but their actual scope differs — enforced by RLS regardless of this UI logic:
+  //   coordinator -> only reports they personally created
+  //   principal   -> every report for their one campus
   const isCampusLocked = profile.role === "coordinator" || profile.role === "principal";
 
   const supabase = createClient();
-  // RLS automatically limits campus-locked roles to their own campus.
+  // RLS scopes this query automatically per the rules above.
   const { data: reports } = await supabase.from("reports").select("*").order("created_at", { ascending: false });
   const { data: campuses } = await supabase.from("campuses").select("*");
   const camps = campuses || [];
@@ -30,10 +34,12 @@ export default async function ReportsPage({ searchParams }: { searchParams: { ca
     id: r.id, subject: r.subject, class: r.class, teacher: r.teacher,
     campusName: campusName(r.campus_id), date: r.date, coordinator_name: r.coordinator_name,
     sample_size: r.sample_size,
-    worst: (r.students || []).reduce((w: string, s: { band: string }) => worse(w, s.band), "Excellent"),
+    worst: (r.students || []).reduce((w: string, s: { statusTag?: string; band?: string }) => worseTag(w, studentTag(s)), "Up-to-date"),
   }));
 
-  const heading = isCampusLocked ? "My Campus Reports" : `All Reports${selectedCampusId ? ` — ${campusName(selectedCampusId)}` : ""}`;
+  const heading = profile.role === "coordinator" ? "My Reports"
+    : profile.role === "principal" ? "Campus Reports"
+    : `All Reports${selectedCampusId ? ` — ${campusName(selectedCampusId)}` : ""}`;
 
   return (
     <div className="card">

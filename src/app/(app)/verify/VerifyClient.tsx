@@ -1,18 +1,28 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CATEGORIES, OBSERVATIONS } from "@/lib/observations";
-import { daysSince, rulesEngine, checkConsistency, remarkTrack1, type StudentInput } from "@/lib/engine";
+import { CATEGORIES, OBSERVATIONS, STATUS_META, CLASS_BAND_LABEL, type ClassBand } from "@/lib/observations";
+import { daysSince, statusTag, checkConsistency, remarkTrack1, type StudentInput } from "@/lib/engine";
 import { saveReportAction } from "@/actions";
-import ReportView, { bandChip, type ReportData } from "@/components/ReportView";
+import ReportView, { type ReportData } from "@/components/ReportView";
 
 const STEPS = ["Details", "Students & Observations", "Preview", "Report"];
 const emptyStudent = (): StudentInput & { customDraft: string } => ({ name: "", lastChecked: "", selected: [], customs: [], customDraft: "" });
+
+function StatusChip({ tag }: { tag: string }) {
+  const meta = (STATUS_META as Record<string, { color: string; emoji: string }>)[tag];
+  return (
+    <span className="band" style={{ background: meta?.color || "#5b616e" }}>
+      {meta?.emoji ? `${meta.emoji} ` : ""}{tag}
+    </span>
+  );
+}
 
 export default function VerifyClient({ campusName, coordinatorName }: { campusName: string; coordinatorName: string }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [academic, setAcademic] = useState({ teacher: "", cls: "", subject: "" });
+  const [classBand, setClassBand] = useState<ClassBand>("primary");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [students, setStudents] = useState([emptyStudent()]);
   const [useAI, setUseAI] = useState(true);
@@ -33,6 +43,7 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
   async function generate() {
     setBusy(true);
     const meta = { campus: campusName, coordinatorName, date };
+    const fullAcademic = { ...academic, classBand };
     const cleanStudents: StudentInput[] = students.map((s) => ({ name: s.name, lastChecked: s.lastChecked, selected: s.selected, customs: s.customs }));
 
     // Ask the server to build the report (deterministic + optional AI paragraphs).
@@ -40,7 +51,7 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
     try {
       const res = await fetch("/api/generate", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meta, academic, students: cleanStudents, useAI }),
+        body: JSON.stringify({ meta, academic: fullAcademic, students: cleanStudents, useAI }),
       });
       built = await res.json();
     } catch {
@@ -49,7 +60,7 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
 
     // Persist it.
     const saved = await saveReportAction({
-      academic, date, students: built.students, recs: built.recs,
+      academic: fullAcademic, date, students: built.students, recs: built.recs,
       finalObservation: built.finalObservation, principalSummary: built.principalSummary, engine: built.engine,
     });
     setReport(built);
@@ -72,9 +83,16 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
             <div className="grow"><label className="label">Teacher</label><input className="input" value={academic.teacher} onChange={(e) => setAcademic({ ...academic, teacher: e.target.value })} /></div>
             <div className="grow"><label className="label">Class / Section</label><input className="input" placeholder="e.g. IX-A" value={academic.cls} onChange={(e) => setAcademic({ ...academic, cls: e.target.value })} /></div>
             <div className="grow"><label className="label">Subject</label><input className="input" value={academic.subject} onChange={(e) => setAcademic({ ...academic, subject: e.target.value })} /></div>
+            <div className="grow">
+              <label className="label">Class Band</label>
+              <select className="input" value={classBand} onChange={(e) => setClassBand(e.target.value as ClassBand)}>
+                <option value="primary">Nursery – V</option>
+                <option value="middle_senior">VI – X</option>
+              </select>
+            </div>
             <div className="grow"><label className="label">Date</label><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
-          <div className="muted">Campus is fixed to <b>{campusName}</b> for your ID.</div>
+          <div className="muted">Campus is fixed to <b>{campusName}</b> for your ID. Class Band sets which checking-frequency schedule applies ({CLASS_BAND_LABEL[classBand]}).</div>
         </div>
       )}
 
@@ -128,14 +146,15 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
               {warnings.map((w, k) => <div key={k} style={{ fontSize: 13, marginTop: 4 }}>• {w}</div>)}
             </div>
           )}
-          <div style={{ fontSize: 14 }}><b>{academic.subject}</b> ({academic.cls}) · {academic.teacher} · {date} · {campusName}</div>
+          <div style={{ fontSize: 14 }}><b>{academic.subject}</b> ({academic.cls}) · {academic.teacher} · {date} · {campusName} · {CLASS_BAND_LABEL[classBand]}</div>
           {students.map((s, i) => {
-            const d = daysSince(s.lastChecked, date); const { band, cpi } = rulesEngine(s.selected, d);
+            const d = daysSince(s.lastChecked, date);
+            const tag = statusTag(s.selected, d, classBand);
             return (
               <div key={i} style={{ borderTop: "1px solid var(--line-soft)", paddingTop: 11, marginTop: 11 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
                   <b style={{ color: "var(--navy)" }}>{s.name || `Student ${i + 1}`}</b>
-                  <span className="muted" style={{ fontSize: 11.5 }}>CPI: {cpi} · {d ?? "—"} days · {bandChip(band)}</span>
+                  <span className="muted" style={{ fontSize: 11.5, display: "flex", alignItems: "center", gap: 6 }}>{d ?? "—"} days <StatusChip tag={tag} /></span>
                 </div>
                 <div style={{ fontSize: 13.5, lineHeight: 1.6, marginTop: 4 }}>{remarkTrack1(s, i)}</div>
               </div>

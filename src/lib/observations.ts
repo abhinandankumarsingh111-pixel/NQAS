@@ -15,7 +15,7 @@ export interface Observation {
   rec?: string;       // recommendation id
   excludes?: string[];
   mergesWith?: string[];
-  crit?: 1 | 2;       // critical floor level
+  crit?: 1 | 2;       // critical floor level (legacy — kept for old-report compatibility)
 }
 
 export const CATEGORIES: { id: Category; name: string }[] = [
@@ -80,6 +80,12 @@ export const RECOMMENDATIONS: Record<string, { order: number; text: string }> = 
   presentation: { order: 6, text: "Reinforce expectations for neatness, margins, and proper upkeep of the notebook." },
 };
 
+// ---------------------------------------------------------------------------
+// LEGACY band vocabulary (Excellent...Critical). No longer produced by new
+// reports, but kept so reports generated before this change keep rendering
+// with their original wording. Never delete this — it's load-bearing for
+// historical data.
+// ---------------------------------------------------------------------------
 export const BAND_ORDER = ["Excellent", "Satisfactory", "Needs Improvement", "Major Concern", "Critical"] as const;
 export type Band = (typeof BAND_ORDER)[number];
 
@@ -90,8 +96,83 @@ export const BAND_META: Record<Band, { color: string; tone: string }> = {
   "Major Concern": { color: "#C4581B", tone: "a matter of concern" },
   Critical: { color: "#A32020", tone: "in need of immediate corrective action" },
 };
-// Small render helper usable by both server and client components.
+
+// ---------------------------------------------------------------------------
+// NVS v1.0 — Notebook Verification Status Matrix (current system).
+// Day-based status, split by class band, with four override tags that take
+// priority over the day count whenever they apply. Locked per product spec.
+// ---------------------------------------------------------------------------
+export type ClassBand = "primary" | "middle_senior";
+
+export const CLASS_BAND_LABEL: Record<ClassBand, string> = {
+  primary: "Nursery – V",
+  middle_senior: "VI – X",
+};
+
+export type DayStatus = "Up-to-date" | "Due Soon" | "Delayed" | "Overdue";
+export type OverrideTag = "Critical" | "Superficial" | "Documentation Issue" | "Index Missing";
+export type StatusTag = OverrideTag | DayStatus;
+
+const DAY_THRESHOLDS: Record<ClassBand, { upTo: number; dueSoon: number; delayed: number }> = {
+  primary: { upTo: 3, dueSoon: 7, delayed: 14 },
+  middle_senior: { upTo: 15, dueSoon: 30, delayed: 40 },
+};
+
+export function dayStatus(days: number | null, classBand: ClassBand): DayStatus {
+  if (days == null) return "Overdue";
+  const t = DAY_THRESHOLDS[classBand];
+  if (days <= t.upTo) return "Up-to-date";
+  if (days <= t.dueSoon) return "Due Soon";
+  if (days <= t.delayed) return "Delayed";
+  return "Overdue";
+}
+
+export const STATUS_META: Record<StatusTag, { color: string; emoji: string; tone: string }> = {
+  Critical: { color: "#A32020", emoji: "🚨", tone: "critical, with no evidence of checking in the current session" },
+  Superficial: { color: "#922B21", emoji: "❌", tone: "superficially checked, with cursory verification" },
+  "Documentation Issue": { color: "#B9770E", emoji: "📋", tone: "affected by documentation lapses" },
+  "Index Missing": { color: "#7D6608", emoji: "📑", tone: "missing a properly maintained index" },
+  "Up-to-date": { color: "#2E9E9E", emoji: "🟢", tone: "up to date" },
+  "Due Soon": { color: "#D4AC0D", emoji: "🟡", tone: "due for checking soon" },
+  Delayed: { color: "#E07B1A", emoji: "🟠", tone: "delayed in checking" },
+  Overdue: { color: "#A32020", emoji: "🔴", tone: "overdue for checking" },
+};
+
+// Combined severity order across BOTH vocabularies (old bands + new tags),
+// least to most severe. A single report only ever uses one vocabulary
+// internally, but this shared order lets "worst of" comparisons work
+// safely regardless of which vintage of report is being read.
+export const ALL_STATUS_ORDER: string[] = [
+  "Excellent", "Up-to-date",
+  "Satisfactory", "Due Soon",
+  "Needs Improvement", "Delayed", "Index Missing",
+  "Major Concern", "Documentation Issue", "Superficial", "Overdue",
+  "Critical",
+];
+
+export function worseTag(a: string, b: string): string {
+  const ia = ALL_STATUS_ORDER.indexOf(a);
+  const ib = ALL_STATUS_ORDER.indexOf(b);
+  return ib > ia ? b : a;
+}
+
+// Universal color lookup: works for legacy bands AND new status tags,
+// so old and new reports both render correctly without special-casing.
+export function tagColor(tag: string): string {
+  const statusMeta = (STATUS_META as Record<string, { color: string }>)[tag];
+  if (statusMeta) return statusMeta.color;
+  const bandMeta = (BAND_META as Record<string, { color: string }>)[tag];
+  if (bandMeta) return bandMeta.color;
+  return "#5b616e";
+}
+
+// Kept for any remaining callers; identical to tagColor.
 export function bandColor(b: string): string {
-  const meta = BAND_META as Record<string, { color: string }>;
-  return meta[b]?.color || "#5b616e";
+  return tagColor(b);
+}
+
+// Reads a student's tag regardless of report vintage: new reports store
+// `statusTag`, old reports store `band`. Falls back to a safe default.
+export function studentTag(s: { statusTag?: string; band?: string }): string {
+  return s.statusTag || s.band || "Up-to-date";
 }

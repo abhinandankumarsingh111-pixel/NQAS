@@ -86,6 +86,39 @@ export async function createUserAction(_prev: unknown, formData: FormData) {
   return { ok: `Created ${role} ID "${id}". Share the ID and password with them.` };
 }
 
+// ---------- OWNER: edit an existing account's role and/or campus ----------
+// Used to promote/demote (e.g. Coordinator -> Principal) without deleting
+// and recreating the account. Writes directly to the profiles table, since
+// RLS policies read role/campus from there, not from auth metadata.
+export async function updateUserAction(
+  _prev: unknown,
+  formData: FormData
+): Promise<{ error?: string; ok?: string }> {
+  const { profile, user } = await getProfile();
+  if (profile?.role !== "owner") return { error: "Not authorised." };
+
+  const targetId = String(formData.get("userId") || "");
+  const role = String(formData.get("role") || "");
+  const campus_id = String(formData.get("campusId") || "") || null;
+
+  if (!targetId) return { error: "Missing account." };
+  if (targetId === user?.id) return { error: "You cannot edit your own account here." };
+  if (!["coordinator", "principal", "management"].includes(role)) return { error: "Invalid role." };
+
+  const needsCampus = role === "coordinator" || role === "principal";
+  if (needsCampus && !campus_id) return { error: "Choose a campus for this role." };
+
+  const admin = adminClient();
+  const { error } = await admin
+    .from("profiles")
+    .update({ role, campus_id: needsCampus ? campus_id : null })
+    .eq("id", targetId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/admin");
+  return { ok: "Account updated." };
+}
+
 // ---------- OWNER: delete a login ID ----------
 export async function deleteUserAction(userId: string) {
   const { profile, user } = await getProfile();
@@ -111,7 +144,7 @@ export async function addCampusAction(_prev: unknown, formData: FormData) {
 
 // ---------- COORDINATOR: save a generated report ----------
 export async function saveReportAction(report: {
-  academic: { teacher: string; cls: string; subject: string };
+  academic: { teacher: string; cls: string; subject: string; classBand?: string };
   date: string;
   students: unknown[];
   recs: string[];
@@ -130,6 +163,7 @@ export async function saveReportAction(report: {
     teacher: report.academic.teacher,
     class: report.academic.cls,
     subject: report.academic.subject,
+    class_band: report.academic.classBand || null,
     date: report.date,
     sample_size: report.students.length,
     engine: report.engine,

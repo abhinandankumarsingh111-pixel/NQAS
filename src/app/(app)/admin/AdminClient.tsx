@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
-import { createUserAction, addCampusAction, deleteUserAction } from "@/actions";
+import { createUserAction, addCampusAction, deleteUserAction, updateUserAction } from "@/actions";
 
 interface Campus { id: string; name: string }
 interface UserRow { id: string; name: string; role: string; login_id: string | null; campus_id: string | null }
@@ -15,12 +15,54 @@ const ROLE_LABEL: Record<string, string> = {
   owner: "Owner", management: "Management", principal: "Principal", coordinator: "Coordinator",
 };
 
+function EditUserRow({ u, campuses, onDone }: { u: UserRow; campuses: Campus[]; onDone: () => void }) {
+  const [state, action] = useFormState(updateUserAction, null as { error?: string; ok?: string } | null);
+  const [role, setRole] = useState(u.role === "owner" ? "coordinator" : u.role);
+  const needsCampus = role === "coordinator" || role === "principal";
+
+  // Close the editor automatically once a save succeeds.
+  useEffect(() => {
+    if (state?.ok && !state.error) onDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
+
+  return (
+    <form action={action} style={{ background: "var(--paper)", border: "1px solid var(--line-soft)", borderRadius: 5, padding: "10px 12px", margin: "6px 0" }}>
+      <input type="hidden" name="userId" value={u.id} />
+      <div className="row" style={{ marginBottom: 8 }}>
+        <div className="grow">
+          <label className="label">Role</label>
+          <select className="input" name="role" value={role} onChange={(e) => setRole(e.target.value)}>
+            <option value="coordinator">Coordinator</option>
+            <option value="principal">Principal (one campus)</option>
+            <option value="management">Management (all campuses)</option>
+          </select>
+        </div>
+        {needsCampus && (
+          <div className="grow">
+            <label className="label">Campus</label>
+            <select className="input" name="campusId" defaultValue={u.campus_id || campuses[0]?.id}>
+              {campuses.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+      {state?.error && <div className="err">{state.error}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <SubmitBtn className="btn btn-accent btn-sm" label="Save" busy="Saving…" />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDone}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 export default function AdminClient({ campuses, users, myId }: { campuses: Campus[]; users: UserRow[]; myId: string }) {
   const [tab, setTab] = useState<"users" | "campuses">("users");
   const [userState, userAction] = useFormState(createUserAction, null as { error?: string; ok?: string } | null);
   const [campusState, campusAction] = useFormState(addCampusAction, null as { error?: string; ok?: string } | null);
   const [role, setRole] = useState("coordinator");
   const [showPw, setShowPw] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const campusName = (id: string | null) => campuses.find((c) => c.id === id)?.name;
 
   // Coordinator and Principal are both campus-locked roles.
@@ -72,18 +114,26 @@ export default function AdminClient({ campuses, users, myId }: { campuses: Campu
           <div className="card">
             <div className="card-h"><h2>Existing IDs ({users.length})</h2></div>
             {users.map((u) => (
-              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid var(--line-soft)", gap: 8, flexWrap: "wrap" }}>
-                <div>
-                  <b style={{ color: "var(--navy)", fontSize: 14 }}>{u.name}</b> <span className="muted">({u.login_id})</span>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    {ROLE_LABEL[u.role] || u.role}
-                    {u.campus_id ? ` · ${campusName(u.campus_id)}` : u.role === "management" ? " · all campuses (read)" : " · full control"}
+              <div key={u.id} style={{ borderBottom: "1px solid var(--line-soft)", padding: "9px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <div>
+                    <b style={{ color: "var(--navy)", fontSize: 14 }}>{u.name}</b> <span className="muted">({u.login_id})</span>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {ROLE_LABEL[u.role] || u.role}
+                      {u.campus_id ? ` · ${campusName(u.campus_id)}` : u.role === "management" ? " · all campuses (read)" : " · full control"}
+                    </div>
                   </div>
+                  {u.id !== myId && editingId !== u.id && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setEditingId(u.id)}>Edit</button>
+                      <form action={async () => { await deleteUserAction(u.id); }}>
+                        <button className="btn btn-danger btn-sm">Remove</button>
+                      </form>
+                    </div>
+                  )}
                 </div>
-                {u.id !== myId && (
-                  <form action={async () => { await deleteUserAction(u.id); }}>
-                    <button className="btn btn-danger btn-sm">Remove</button>
-                  </form>
+                {editingId === u.id && (
+                  <EditUserRow u={u} campuses={campuses} onDone={() => setEditingId(null)} />
                 )}
               </div>
             ))}

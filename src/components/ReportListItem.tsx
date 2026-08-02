@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { bandColor } from "@/lib/observations";
+import { tagColor } from "@/lib/observations";
 import { deleteReportAction } from "@/actions";
 
 export interface ReportRow {
@@ -41,7 +41,7 @@ export default function ReportListItem({ r, canDelete }: { r: ReportRow; canDele
         </div>
       </Link>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span className="band" style={{ background: bandColor(r.worst) }}>{r.worst}</span>
+        <span className="band" style={{ background: tagColor(r.worst) }}>{r.worst}</span>
         {canDelete && !confirming && (
           <button className="btn btn-danger btn-sm no-print" onClick={() => setConfirming(true)}>Delete</button>
         )}

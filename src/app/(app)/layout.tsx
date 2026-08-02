@@ -21,9 +21,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="shell">
       <div className="topbar no-print">
-        <div>
-          <span className="brand">NQAS</span>
-          <span className="muted" style={{ marginLeft: 8 }}>Notebook Quality Assurance System</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img src="/logo-symbol.png" alt="" width={30} height={30} />
+          <div>
+            <span className="brand">NQAS</span>
+            <span className="muted" style={{ marginLeft: 8 }}>Notebook Quality Assurance System</span>
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span className="muted">{profile.name} · <b style={{ color: "var(--teal)" }}>{profile.role}</b></span>
