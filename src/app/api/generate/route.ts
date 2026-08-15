@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({ model: "claude-sonnet-5", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
     });
     const data = await res.json();
     const text = (data.content || []).map((i: { type: string; text?: string }) => (i.type === "text" ? i.text : "")).join("").trim().replace(/```json|```/g, "").trim();
