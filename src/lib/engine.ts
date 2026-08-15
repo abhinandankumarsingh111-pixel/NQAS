@@ -137,10 +137,24 @@ function finalTrack1(results: StudentResult[], inputs: StudentInput[], academic:
 
 function summaryTrack1(results: StudentResult[], academic: Academic, meta: ReportMeta, recs: string[]): string {
   const n = results.length;
+  const good = results.filter((s) => GOOD_TAGS.has(s.statusTag)).length;
+  const concern = n - good;
   const worst = results.reduce<string>((w, s) => worseTag(w, s.statusTag), "Up-to-date");
+  const worstTone = (STATUS_META as Record<string, { tone: string }>)[worst]?.tone || "in need of review";
   const action = recs.length ? recs[0] : "No corrective action is required at this stage.";
-  const tone = (STATUS_META as Record<string, { tone: string }>)[worst]?.tone || "in need of review";
-  return `Notebook verification of ${academic.subject || "subject"} (${academic.cls || "class"}) under ${academic.teacher || "the teacher"} was carried out on ${meta.date} across ${n} sample${n > 1 ? "s" : ""}. Overall the notebooks are ${tone}. ${action}`;
+  // "Overall" must describe the whole batch, not just its single worst notebook — a lone
+  // Delayed notebook among four Up-to-date ones should not be reported as "Overall the
+  // notebooks are delayed in checking." Only use the worst tone for the whole batch when
+  // the whole batch actually shares it (concern === n, which also covers the n === 1
+  // single-notebook case); otherwise state the proportion explicitly.
+  const overall = !concern
+    ? "Overall the notebooks are up to date."
+    : concern === n
+      ? `Overall the notebooks are ${worstTone}.`
+      : concern === 1
+        ? `Overall, ${good} of ${n} ${good === 1 ? "is" : "are"} up to date, though 1 is ${worstTone}.`
+        : `Overall, ${good} of ${n} ${good === 1 ? "is" : "are"} up to date, though ${concern} require attention (most seriously, ${worstTone}).`;
+  return `Notebook verification of ${academic.subject || "subject"} (${academic.cls || "class"}) under ${academic.teacher || "the teacher"} was carried out on ${meta.date} across ${n} sample${n > 1 ? "s" : ""}. ${overall} ${action}`;
 }
 
 export function consolidateRecs(allIds: string[]): string[] {
