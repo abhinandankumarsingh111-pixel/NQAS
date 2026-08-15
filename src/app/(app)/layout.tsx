@@ -19,24 +19,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="shell">
-      <div className="topbar no-print">
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <img src="/logo-symbol.png" alt="" width={30} height={30} />
-          <div>
-            <span className="brand">NQAS</span>
-            <span className="muted" style={{ marginLeft: 8 }}>Notebook Quality Assurance System</span>
+    <>
+      <header className="app-topbar no-print">
+        <div className="app-topbar-inner">
+          <div className="app-topbar-brand">
+            <img src="/logo-symbol.png" alt="" width={32} height={32} />
+            <div>
+              <span className="app-topbar-name">NQAS</span>
+              <span className="app-topbar-sub">Notebook Quality Assurance System</span>
+            </div>
+          </div>
+          <div className="app-topbar-user">
+            <span>{profile.name} · <b>{profile.role}</b></span>
+            <form action={logoutAction}><button className="btn btn-ghost btn-sm">Sign out</button></form>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="muted">{profile.name} · <b style={{ color: "var(--teal)" }}>{profile.role}</b></span>
-          <form action={logoutAction}><button className="btn btn-ghost btn-sm">Sign out</button></form>
-        </div>
+      </header>
+      <div className="shell">
+        <nav className="tabs no-print">
+          {nav.map((n) => <Link key={n.href} href={n.href} className="tab">{n.label}</Link>)}
+        </nav>
+        {children}
       </div>
-      <nav className="tabs no-print">
-        {nav.map((n) => <Link key={n.href} href={n.href} className="tab">{n.label}</Link>)}
-      </nav>
-      {children}
-    </div>
+      <footer className="app-footer no-print">
+        <div className="app-footer-ring"><img src="/logo-symbol.png" alt="" width={26} height={26} /></div>
+        <div className="app-footer-brand">Krishna Vikash Group of CBSE Schools</div>
+        <div className="app-footer-tagline">Care · Culture · Career</div>
+        <p className="app-footer-note">Notebook Quality Assurance System — one verification standard, applied the same way at every campus.</p>
+      </footer>
+    </>
   );
 }
