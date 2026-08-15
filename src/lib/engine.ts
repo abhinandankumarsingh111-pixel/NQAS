@@ -121,10 +121,17 @@ function finalTrack1(results: StudentResult[], inputs: StudentInput[], academic:
   const concern = n - good;
   const anyCritical = results.some((s) => s.statusTag === "Critical");
   const cats = topCats(results, inputs);
+  // A notebook can land in "concern" purely on elapsed days (Delayed/Overdue) with an
+  // otherwise clean, all-positive checklist — topCats only sees negative-tag categories,
+  // so it can come back empty even though concern > 0. Fall back to naming the day-based
+  // lapse itself rather than leaving "chiefly on ___" blank.
   const tail = anyCritical
     ? "One or more notebooks show critical lapses — with no evidence of checking in the current session — that call for immediate corrective action."
-    : concern ? `The concerns centre chiefly on ${joinC(cats)} and should be addressed in the coming cycle.`
-    : "Standards are being maintained and should be sustained.";
+    : !concern ? "Standards are being maintained and should be sustained."
+    : cats.length ? `The concerns centre chiefly on ${joinC(cats)} and should be addressed in the coming cycle.`
+    : concern > 1
+      ? "The concerns centre chiefly on checking having fallen behind schedule and should be addressed in the coming cycle."
+      : "The concern centres chiefly on checking having fallen behind schedule and should be addressed in the coming cycle.";
   return `Across the ${n} notebook${n > 1 ? "s" : ""} sampled for ${academic.teacher || "the teacher"}'s ${academic.subject || "subject"} (${academic.cls || "class"}), ${good} of ${n} ${good === 1 ? "is" : "are"} up to date or due soon, while ${concern} require${concern === 1 ? "s" : ""} attention. ${tail}`;
 }
 
@@ -149,7 +156,16 @@ export function buildDeterministic(meta: ReportMeta, academic: Academic, student
     const tag = statusTag(s.selected, d, academic.classBand);
     return { name: s.name, days: d, statusTag: tag, remark: remarkTrack1(s, idx) };
   });
-  const recs = consolidateRecs(students.flatMap((s) => s.selected));
+  let recs = consolidateRecs(students.flatMap((s) => s.selected));
+  // Recommendations are derived purely from selected observation ids, same blind spot as
+  // topCats above. A notebook can be Delayed/Overdue/Critical on elapsed days alone, with
+  // no negative observation selected, so recs can come back empty even though a concern
+  // exists — leaving the principal's summary to say "No corrective action is required"
+  // right next to a Delayed/Overdue status. Fall back to the standard checking-schedule
+  // recommendation whenever any student has a non-good status but no rec was derived.
+  if (!recs.length && results.some((s) => !GOOD_TAGS.has(s.statusTag))) {
+    recs = [RECOMMENDATIONS.regular_checking.text];
+  }
   return {
     meta, academic, students: results, recs,
     finalObservation: finalTrack1(results, students, academic),
