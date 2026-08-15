@@ -1,5 +1,10 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Inter, Poppins, Playfair_Display } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const poppins = Poppins({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-poppins", display: "swap" });
+const playfair = Playfair_Display({ subsets: ["latin"], weight: ["700"], style: ["normal", "italic"], variable: "--font-playfair", display: "swap" });
 
 export const metadata: Metadata = {
   title: "NQAS — Notebook Quality Assurance System",
@@ -8,7 +13,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${poppins.variable} ${playfair.variable}`}>
       <body>{children}</body>
     </html>
   );
