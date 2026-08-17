@@ -8,13 +8,23 @@
 create table if not exists public.campuses (
   id          uuid primary key default gen_random_uuid(),
   name        text not null unique,
+  code        text,
   created_at  timestamptz not null default now()
 );
+
+-- Existing databases created before `code` was introduced.
+alter table public.campuses add column if not exists code text;
+
+-- `name` already carries a case-SENSITIVE unique constraint. These two indexes
+-- close the remaining gap so that differing only by letter case or by code is
+-- still treated as the same campus.
+create unique index if not exists campuses_name_ci_uidx on public.campuses (lower(name));
+create unique index if not exists campuses_code_uidx    on public.campuses (upper(code));
 
 create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
   name        text not null,
-  role        text not null check (role in ('owner','management','coordinator')),
+  role        text not null check (role in ('owner','management','principal','coordinator')),
   campus_id   uuid references public.campuses(id) on delete set null,
   login_id    text,
   created_at  timestamptz not null default now()
@@ -28,6 +38,7 @@ create table if not exists public.reports (
   teacher           text,
   class             text,
   subject           text,
+  class_band        text,
   date              date,
   sample_size       int,
   engine            text,
@@ -106,7 +117,19 @@ drop policy if exists "reports_insert" on public.reports;
 create policy "reports_insert" on public.reports for insert
   with check (public.my_role() = 'coordinator' and campus_id = public.my_campus());
 
--- ---------- SEED: the four campuses (edit freely) ----------
-insert into public.campuses (name) values
-  ('KVIGS Rourkela'), ('KVTS Angul'), ('KVNGS JDP'), ('KV Vizag')
+-- ---------- SEED: the Krishna Vikash campus roster ----------
+-- Safe to re-run: `on conflict do nothing` means an existing campus is left
+-- exactly as it is, so its id (and therefore every report and profile pointing
+-- at it) is never disturbed.
+insert into public.campuses (name, code) values
+  ('Vikash First Step, Bargarh',          'VFS-BGH'),
+  ('Vikash Residential School, Bargarh',  'VRS-BGH'),
+  ('Vikash Ind Global School, Rourkela',  'VIGS-RKL'),
+  ('KV Techno School, Brahmapur',         'KVTS-BRM'),
+  ('KV Techno School, Angul',             'KVTS-ANG'),
+  ('KV Gadodia Global School, Rajgangpur','KVGGS-RJP'),
+  ('KV Global School, Raipur',            'KVGS-RPR'),
+  ('KV Techno School, Bhilai',            'KVTS-BHI'),
+  ('KV Next-Gen School, Jagdalpur',       'KVNGS-JGD'),
+  ('KV Vijayam School, Visakhapatnam',    'KVVS-VSK')
 on conflict (name) do nothing;
