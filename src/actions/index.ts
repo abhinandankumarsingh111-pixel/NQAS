@@ -2,6 +2,7 @@
 
 import { createClient, getProfile } from "@/lib/supabase/server";
 import { adminClient } from "@/lib/supabase/admin";
+import { isTeacherFault } from "@/lib/attribution";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -157,6 +158,66 @@ export async function addCampusAction(_prev: unknown, formData: FormData) {
   return { ok: `Added campus "${name}".` };
 }
 
+// ---------- ANY CAMPUS USER: add a teacher to the faculty list ----------
+// Coordinators may add (they would otherwise be stuck mid-verification), but
+// the three gates in TeacherPicker run first, and the database enforces
+// uniqueness on (campus, normalised name, normalised subject) regardless.
+export async function addFacultyAction(
+  campusId: string, rawName: string, rawSubject?: string,
+): Promise<{ ok: boolean; id?: string; name?: string; subject?: string | null; error?: string }> {
+  const { profile, user } = await getProfile();
+  if (!profile || !user) return { ok: false, error: "Not authorised." };
+
+  const name = String(rawName || "").trim().replace(/\s+/g, " ");
+  const subject = String(rawSubject || "").trim().replace(/\s+/g, " ") || null;
+  if (name.length < 2) return { ok: false, error: "Enter the teacher's full name." };
+
+  // Campus comes from the caller's own profile unless they are org-wide, so a
+  // coordinator cannot add faculty to another campus by editing the request.
+  const targetCampus = ["owner", "management"].includes(profile.role) ? campusId : profile.campus_id;
+  if (!targetCampus) return { ok: false, error: "No campus on your account." };
+
+  const supabase = createClient();
+
+  // Return the existing record rather than erroring: two coordinators adding
+  // the same teacher at once should converge on one row, not see a failure.
+  const { data: existing } = await supabase
+    .from("faculty").select("id, name, subject").eq("campus_id", targetCampus);
+  const clash = (existing || []).find(
+    (f: { name: string; subject: string | null }) =>
+      f.name.trim().toLowerCase() === name.toLowerCase() &&
+      (f.subject || "").trim().toLowerCase() === (subject || "").toLowerCase()
+  ) as { id: string; name: string; subject: string | null } | undefined;
+  if (clash) return { ok: true, id: clash.id, name: clash.name, subject: clash.subject };
+
+  const { data, error } = await supabase
+    .from("faculty").insert({ campus_id: targetCampus, name, subject })
+    .select("id, name, subject").single();
+
+  if (error) {
+    // Lost a race against the unique index — re-read and use the winner.
+    const { data: again } = await supabase
+      .from("faculty").select("id, name, subject").eq("campus_id", targetCampus);
+    const found = (again || []).find(
+      (f: { name: string; subject: string | null }) =>
+        f.name.trim().toLowerCase() === name.toLowerCase() &&
+        (f.subject || "").trim().toLowerCase() === (subject || "").toLowerCase()
+    ) as { id: string; name: string; subject: string | null } | undefined;
+    if (found) return { ok: true, id: found.id, name: found.name, subject: found.subject };
+    return { ok: false, error: error.message };
+  }
+
+  await supabase.from("faculty_postings").insert({ faculty_id: data.id, campus_id: targetCampus });
+  await supabase.from("faculty_audit").insert({
+    faculty_id: data.id, action: "created",
+    detail: { source: "verification form", subject },
+    actor_id: user.id, actor_name: profile.name,
+  });
+
+  revalidatePath("/faculty");
+  return { ok: true, id: data.id, name: data.name, subject: data.subject };
+}
+
 // ---------- LEADERSHIP: file a remark ----------
 // Remarks are permanent. There is no edit or delete action anywhere in this
 // file, and the database refuses both via trigger even for the service-role
@@ -241,8 +302,10 @@ export async function acknowledgeRemarkAction(remarkId: string): Promise<{ ok: b
 // ---------- COORDINATOR: save a generated report ----------
 export async function saveReportAction(report: {
   academic: { teacher: string; cls: string; subject: string; classBand?: string };
+  facultyId?: string | null;
+  samplingMethod?: string | null;
   date: string;
-  students: unknown[];
+  students: { days?: number | null; obs?: string[] | null }[];
   recs: string[];
   finalObservation: string;
   principalSummary: string;
@@ -251,12 +314,27 @@ export async function saveReportAction(report: {
   const { profile, user } = await getProfile();
   if (!profile || profile.role !== "coordinator" || !user) return { error: "Not authorised." };
 
+  // Derived at write time. Recomputing these by expanding the students jsonb
+  // across every report is fine at a dozen reports and unusable at ten campuses
+  // times weekly verifications times three years.
+  const days = report.students.map((s) => s.days).filter((d): d is number => typeof d === "number");
+  const sorted = [...days].sort((a, b) => a - b);
+  const medianDays = sorted.length
+    ? (sorted.length % 2 ? sorted[sorted.length >> 1]
+      : (sorted[(sorted.length >> 1) - 1] + sorted[sorted.length >> 1]) / 2)
+    : null;
+  const cqFlagCount = report.students.filter((s) => (s.obs || []).some(isTeacherFault)).length;
+  const criticalCount = report.students.filter((s) =>
+    (s.obs || []).some((o) => o === "CI.no_teacher_check" || o === "CI.long_gap")).length;
+
   const supabase = createClient();
   const { data, error } = await supabase.from("reports").insert({
     campus_id: profile.campus_id,
     coordinator_id: user.id,
     coordinator_name: profile.name,
     teacher: report.academic.teacher,
+    faculty_id: report.facultyId || null,
+    sampling_method: report.samplingMethod || null,
     class: report.academic.cls,
     subject: report.academic.subject,
     class_band: report.academic.classBand || null,
@@ -267,10 +345,15 @@ export async function saveReportAction(report: {
     recs: report.recs,
     final_observation: report.finalObservation,
     principal_summary: report.principalSummary,
+    median_days: medianDays,
+    cq_flag_count: cqFlagCount,
+    teacher_critical_count: criticalCount,
   }).select("id").single();
 
   if (error) return { error: error.message };
   revalidatePath("/reports");
+  revalidatePath("/faculty");
+  if (report.facultyId) revalidatePath(`/faculty/${report.facultyId}`);
   return { ok: true, id: data.id };
 }
 
