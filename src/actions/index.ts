@@ -157,6 +157,87 @@ export async function addCampusAction(_prev: unknown, formData: FormData) {
   return { ok: `Added campus "${name}".` };
 }
 
+// ---------- LEADERSHIP: file a remark ----------
+// Remarks are permanent. There is no edit or delete action anywhere in this
+// file, and the database refuses both via trigger even for the service-role
+// key — so nothing added later can quietly make them mutable.
+export async function fileRemarkAction(_prev: unknown, formData: FormData) {
+  const { profile, user } = await getProfile();
+  if (!profile || !user) return { error: "Not authorised." };
+  if (!["owner", "management", "principal"].includes(profile.role)) {
+    return { error: "Only management and principals may file remarks." };
+  }
+
+  const facultyId = String(formData.get("facultyId") || "") || null;
+  const coordinatorId = String(formData.get("coordinatorId") || "") || null;
+  const reportId = String(formData.get("reportId") || "") || null;
+  const kind = String(formData.get("kind") || "");
+  const body = String(formData.get("body") || "").trim();
+  const occurredOn = String(formData.get("occurredOn") || "") || new Date().toISOString().slice(0, 10);
+  const subjectName = String(formData.get("subjectName") || "").trim();
+
+  if (!["complaint", "appreciation", "observation"].includes(kind)) return { error: "Choose a remark type." };
+  if (!body) return { error: "Write the remark before filing it." };
+  if (!facultyId && !coordinatorId) return { error: "Missing who this remark is about." };
+  if (facultyId && coordinatorId) return { error: "A remark is about one person only." };
+
+  const supabase = createClient();
+
+  // campus_id is taken from the subject record, never from the form, so a
+  // principal cannot file outside their own campus by editing the request.
+  let campusId: string | null = null;
+  if (facultyId) {
+    const { data: f } = await supabase.from("faculty").select("campus_id").eq("id", facultyId).single();
+    if (!f) return { error: "Teacher not found." };
+    campusId = f.campus_id;
+  } else {
+    const { data: p } = await supabase.from("profiles").select("campus_id").eq("id", coordinatorId).single();
+    campusId = p?.campus_id ?? profile.campus_id;
+  }
+  if (profile.role === "principal" && campusId !== profile.campus_id) {
+    return { error: "You can only file remarks for your own campus." };
+  }
+
+  const { error } = await supabase.from("remarks").insert({
+    campus_id: campusId,
+    target: facultyId ? "faculty" : "coordinator",
+    faculty_id: facultyId,
+    coordinator_id: coordinatorId,
+    subject_name: subjectName || "—",
+    report_id: reportId,
+    kind, body,
+    author_id: user.id,
+    author_name: profile.name,
+    author_role: profile.role,
+    occurred_on: occurredOn,
+  });
+  if (error) return { error: error.message };
+
+  if (facultyId) revalidatePath(`/faculty/${facultyId}`);
+  if (reportId) revalidatePath(`/reports/${reportId}`);
+  revalidatePath("/faculty");
+  return { ok: "Remark filed. It is now a permanent part of this record." };
+}
+
+// ---------- LEADERSHIP: record that a remark was discussed with the teacher ----------
+export async function acknowledgeRemarkAction(remarkId: string): Promise<{ ok: boolean; error?: string }> {
+  const { profile, user } = await getProfile();
+  if (!profile || !user) return { ok: false, error: "Not authorised." };
+  if (!["owner", "management", "principal"].includes(profile.role)) {
+    return { ok: false, error: "Not authorised." };
+  }
+  const supabase = createClient();
+  const { data: rm } = await supabase.from("remarks").select("faculty_id").eq("id", remarkId).single();
+  const { error } = await supabase.from("remark_acknowledgements").insert({
+    remark_id: remarkId,
+    discussed_by: user.id,
+    discussed_by_name: profile.name,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (rm?.faculty_id) revalidatePath(`/faculty/${rm.faculty_id}`);
+  return { ok: true };
+}
+
 // ---------- COORDINATOR: save a generated report ----------
 export async function saveReportAction(report: {
   academic: { teacher: string; cls: string; subject: string; classBand?: string };
@@ -196,13 +277,21 @@ export async function saveReportAction(report: {
 // ---------- OWNER: delete a stored report ----------
 // Always returns the same shape so client-side handling is trivial and safe.
 export async function deleteReportAction(reportId: string): Promise<{ ok: boolean; error?: string }> {
-  const { profile } = await getProfile();
+  const { profile, user } = await getProfile();
   if (profile?.role !== "owner") return { ok: false, error: "Only the owner can delete reports." };
+
+  // SOFT delete. A verification is half of a teacher's accountability record,
+  // so it is hidden from every list but never destroyed — otherwise the record
+  // has an eraser, and a record with an eraser is worth little in a dispute.
   // Service-role client bypasses RLS; caller verified as owner above.
   const admin = adminClient();
-  const { error } = await admin.from("reports").delete().eq("id", reportId);
+  const { error } = await admin.from("reports")
+    .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null })
+    .eq("id", reportId)
+    .is("deleted_at", null);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/dashboard");
   revalidatePath("/reports");
+  revalidatePath("/faculty");
   return { ok: true };
 }
