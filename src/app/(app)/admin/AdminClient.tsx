@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { createUserAction, addCampusAction, deleteUserAction, updateUserAction } from "@/actions";
 
-interface Campus { id: string; name: string }
+interface Campus { id: string; name: string; code?: string | null }
 interface UserRow { id: string; name: string; role: string; login_id: string | null; campus_id: string | null }
 
 function SubmitBtn({ className, label, busy }: { className: string; label: string; busy: string }) {
@@ -143,10 +143,22 @@ export default function AdminClient({ campuses, users, myId }: { campuses: Campu
 
       {tab === "campuses" && (
         <div className="card">
-          <div className="card-h"><h2>Campuses</h2></div>
-          {campuses.map((c) => <div key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--line-soft)", fontSize: 14 }}>{c.name}</div>)}
-          <form action={campusAction} style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <input className="input" style={{ flex: 1 }} name="campusName" placeholder="New campus name" />
+          <div className="card-h"><h2>Campuses <span className="muted" style={{ fontWeight: 500 }}>({campuses.length})</span></h2></div>
+          {campuses.map((c) => (
+            <div key={c.id} style={{ padding: "8px 0", borderBottom: "1px solid var(--line-soft)", fontSize: 14, display: "flex", alignItems: "center", gap: 10 }}>
+              <span>{c.name}</span>
+              {c.code && (
+                <span style={{
+                  marginLeft: "auto", fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+                  color: "var(--sub)", background: "var(--chip)", border: "1px solid var(--line-soft)",
+                  borderRadius: 6, padding: "2px 7px", whiteSpace: "nowrap",
+                }}>{c.code}</span>
+              )}
+            </div>
+          ))}
+          <form action={campusAction} style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <input className="input" style={{ flex: "1 1 200px" }} name="campusName" placeholder="New campus name" />
+            <input className="input" style={{ flex: "0 0 120px", textTransform: "uppercase" }} name="campusCode" placeholder="Code" />
             <SubmitBtn className="btn btn-ghost" label="Add" busy="Adding…" />
           </form>
           {campusState?.error && <div className="err" style={{ marginTop: 8 }}>{campusState.error}</div>}
