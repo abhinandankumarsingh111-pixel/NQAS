@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./accountability.css";
 import type { Metadata } from "next";
 import { Inter, Poppins, Playfair_Display } from "next/font/google";
 

@@ -1,0 +1,118 @@
+/* ============================================================
+   TEACHER ACCOUNTABILITY — faculty directory, teacher record,
+   remark composer. Figures that may inform an employment
+   decision are styled to be read carefully, not skimmed.
+   ============================================================ */
+
+.fac-search { display: flex; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
+.fac-search .input { flex: 1 1 260px; }
+
+.fac-list { display: flex; flex-direction: column; }
+.fac-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 11px 4px; border-bottom: 1px solid var(--line-soft);
+  text-decoration: none; color: inherit;
+}
+.fac-row:hover { background: var(--paper); }
+.fac-main { flex: 1 1 240px; min-width: 0; }
+.fac-name { font-weight: 600; font-size: 14.5px; color: var(--navy); display: flex; align-items: center; gap: 8px; }
+.fac-sub  { font-size: 12px; color: var(--sub); margin-top: 2px; }
+.fac-figs { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.fac-stat { font-weight: 700; font-size: 15px; display: flex; align-items: baseline; gap: 4px; font-family: var(--font-ui); }
+.fac-stat small { font-size: 10.5px; font-weight: 600; color: var(--sub); text-transform: uppercase; letter-spacing: .5px; }
+.fac-stat.cool { color: var(--teal); }
+.fac-stat.warm { color: var(--orange); }
+.fac-stat.hot  { color: var(--red); }
+
+.fac-chip {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--sub); background: var(--chip); border: 1px solid var(--line-soft);
+  border-radius: 6px; padding: 2px 7px; white-space: nowrap;
+}
+.fac-chip-off { color: var(--red); border-color: var(--red); background: transparent; }
+
+.empty { padding: 22px 4px; font-size: 14px; line-height: 1.6; }
+.notice {
+  border-left: 3px solid var(--orange); background: var(--paper);
+  padding: 10px 12px; font-size: 13px; line-height: 1.6; margin-bottom: 14px; border-radius: 0 6px 6px 0;
+}
+
+/* --- figures --- */
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.fig { border: 1px solid var(--line-soft); border-left: 3px solid var(--gold); border-radius: 8px; padding: 10px 12px; background: var(--paper); }
+.fig-n { font-family: var(--font-ui); font-size: 23px; font-weight: 700; color: var(--navy); line-height: 1.1; }
+.fig-n small { font-size: 13px; font-weight: 600; }
+.fig-l { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--sub); margin-top: 3px; }
+.fig-b { font-size: 11.5px; color: var(--sub); margin-top: 4px; line-height: 1.45; }
+
+.bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--chip); }
+.bar span { display: block; }
+.bar-key { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 7px; font-size: 11.5px; color: var(--sub); }
+.bar-key i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+
+/* --- timeline --- */
+.tl { display: flex; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+.tl-date { flex: 0 0 84px; font-size: 11.5px; color: var(--sub); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.tl-body { flex: 1; min-width: 0; }
+.tl-body a { color: var(--navy); text-decoration: none; }
+.tl-body a:hover { text-decoration: underline; }
+.tl-remark { border-left: 3px solid var(--line); padding-left: 11px; }
+.tl-complaint    { border-left-color: var(--red); }
+.tl-appreciation { border-left-color: var(--teal); }
+.tl-observation  { border-left-color: var(--gold); }
+
+.ack { font-size: 11.5px; }
+.ack-done    { color: var(--teal); }
+.ack-pending { color: var(--orange); }
+
+/* --- remark composer --- */
+.kindpick { display: flex; gap: 8px; flex-wrap: wrap; }
+.kind {
+  border: 1.5px solid var(--line); background: #fff; border-radius: 8px;
+  padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  font-family: var(--font-ui); color: var(--sub);
+}
+.kind.on.kind-appreciation { border-color: var(--teal); color: var(--teal); background: rgba(46,158,158,.07); }
+.kind.on.kind-observation  { border-color: var(--gold-dk); color: var(--gold-dk); background: rgba(212,172,13,.09); }
+.kind.on.kind-complaint    { border-color: var(--red); color: var(--red); background: rgba(163,32,32,.06); }
+textarea.input { resize: vertical; line-height: 1.55; font-family: var(--font-body); }
+
+.confirm {
+  margin-top: 12px; border: 1.5px solid var(--orange); border-radius: 8px;
+  padding: 12px 14px; font-size: 13px; line-height: 1.6; background: rgba(224,123,26,.05);
+}
+
+.print-only { display: none; }
+@media print {
+  .print-only { display: block; }
+  .fac-row:hover { background: transparent; }
+}
+
+@media (max-width: 560px) {
+  .fac-figs { margin-left: 0; width: 100%; }
+  .tl-date { flex-basis: 68px; }
+}
+
+/* --- teacher picker (verification form) --- */
+.tp { position: relative; }
+.tp-picked {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1.5px solid var(--teal); border-radius: 8px; padding: 8px 10px 8px 12px;
+  background: rgba(46,158,158,.06);
+}
+.tp-list { display: flex; flex-direction: column; margin-top: 6px; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+.tp-opt {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 9px 12px; background: #fff; border: none; border-bottom: 1px solid var(--line-soft);
+  text-align: left; cursor: pointer; font-size: 13.5px; font-family: var(--font-body);
+}
+.tp-opt:last-child { border-bottom: none; }
+.tp-opt:hover { background: var(--paper); }
+.tp-note { margin-top: 7px; font-size: 12.5px; color: var(--sub); }
+.tp-add { margin-top: 8px; }
+.tp-confirm {
+  margin-top: 10px; border: 1.5px solid var(--gold-dk); border-radius: 8px;
+  padding: 12px 14px; background: rgba(212,172,13,.06); font-size: 13px; line-height: 1.55;
+}
+.tp-sugg { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }

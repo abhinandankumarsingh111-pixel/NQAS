@@ -9,11 +9,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const nav: { href: string; label: string }[] = [];
   if (profile.role === "owner") {
-    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/admin", label: "Admin" });
+    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" }, { href: "/admin", label: "Admin" });
   } else if (profile.role === "management" || profile.role === "principal") {
-    // Principal gets the same single nav item as Management, but the dashboard
-    // itself is scoped to their one campus (see dashboard/page.tsx).
-    nav.push({ href: "/dashboard", label: "Dashboard" });
+    // Principal gets the same nav as Management, but both the dashboard and the
+    // faculty records are scoped to their one campus by RLS.
+    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" });
   } else {
     nav.push({ href: "/verify", label: "New Verification" }, { href: "/reports", label: "My Reports" });
   }

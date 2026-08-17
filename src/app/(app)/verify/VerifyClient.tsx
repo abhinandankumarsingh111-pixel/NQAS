@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { CATEGORIES, OBSERVATIONS, STATUS_META, CLASS_BAND_LABEL, type ClassBand } from "@/lib/observations";
 import { daysSince, statusTag, checkConsistency, remarkTrack1, type StudentInput } from "@/lib/engine";
 import { saveReportAction } from "@/actions";
+import TeacherPicker, { type Fac } from "@/components/TeacherPicker";
 import ReportView, { type ReportData } from "@/components/ReportView";
 
 const STEPS = ["Details", "Students & Observations", "Preview", "Report"];
@@ -18,10 +19,21 @@ function StatusChip({ tag }: { tag: string }) {
   );
 }
 
-export default function VerifyClient({ campusName, coordinatorName }: { campusName: string; coordinatorName: string }) {
+const SAMPLING = [
+  { id: "random", label: "Random" },
+  { id: "spot", label: "Spot check" },
+  { id: "teacher_provided", label: "Teacher gave them" },
+] as const;
+
+export default function VerifyClient({
+  campusName, coordinatorName, campusId, faculty,
+}: { campusName: string; coordinatorName: string; campusId: string; faculty: Fac[] }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [academic, setAcademic] = useState({ teacher: "", cls: "", subject: "" });
+  const [facultyId, setFacultyId] = useState<string | null>(null);
+  const [facultyList, setFacultyList] = useState<Fac[]>(faculty);
+  const [sampling, setSampling] = useState<string>("random");
   const [classBand, setClassBand] = useState<ClassBand>("primary");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [students, setStudents] = useState([emptyStudent()]);
@@ -37,7 +49,7 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
     setStudents((a) => a.map((s, k) => k !== i ? s : ({ ...s, selected: s.selected.includes(id) ? s.selected.filter((x) => x !== id) : [...s.selected, id] })));
 
   const canGo = step === 0
-    ? academic.teacher && academic.cls && academic.subject && date
+    ? facultyId && academic.cls && academic.subject && date
     : step === 1 ? students.every((s) => s.name) && students.some((s) => s.selected.length > 0) : true;
 
   async function generate() {
@@ -60,7 +72,8 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
 
     // Persist it.
     const saved = await saveReportAction({
-      academic: fullAcademic, date, students: built.students, recs: built.recs,
+      academic: fullAcademic, facultyId, samplingMethod: sampling,
+      date, students: built.students, recs: built.recs,
       finalObservation: built.finalObservation, principalSummary: built.principalSummary, engine: built.engine,
     });
     setReport(built);
@@ -80,7 +93,20 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
         <div className="card">
           <div className="card-h"><h2>Verification Details</h2></div>
           <div className="row">
-            <div className="grow"><label className="label">Teacher</label><input className="input" value={academic.teacher} onChange={(e) => setAcademic({ ...academic, teacher: e.target.value })} /></div>
+            <div style={{ flex: "2 1 260px" }}>
+              <label className="label">Teacher</label>
+              <TeacherPicker
+                faculty={facultyList} campusId={campusId}
+                valueId={facultyId} valueName={academic.teacher}
+                onPick={(id, name, subject) => {
+                  setFacultyId(id);
+                  setAcademic((a) => ({ ...a, teacher: name, subject: a.subject || (subject || "") }));
+                  if (id && !facultyList.some((f) => f.id === id)) {
+                    setFacultyList((l) => [...l, { id, name, subject: subject ?? null }]);
+                  }
+                }}
+              />
+            </div>
             <div className="grow"><label className="label">Class / Section</label><input className="input" placeholder="e.g. IX-A" value={academic.cls} onChange={(e) => setAcademic({ ...academic, cls: e.target.value })} /></div>
             <div className="grow"><label className="label">Subject</label><input className="input" value={academic.subject} onChange={(e) => setAcademic({ ...academic, subject: e.target.value })} /></div>
             <div className="grow">
@@ -92,7 +118,19 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
             </div>
             <div className="grow"><label className="label">Date</label><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
           </div>
-          <div className="muted">Campus is fixed to <b>{campusName}</b> for your ID. Class Band sets which checking-frequency schedule applies ({CLASS_BAND_LABEL[classBand]}).</div>
+          <div style={{ marginTop: 4 }}>
+            <label className="label">How were these notebooks chosen?</label>
+            <div className="kindpick">
+              {SAMPLING.map((m) => (
+                <button key={m.id} type="button" className={`kind ${sampling === m.id ? "on kind-observation" : ""}`}
+                  onClick={() => setSampling(m.id)}>{m.label}</button>
+              ))}
+            </div>
+            <div className="muted" style={{ fontSize: 11.5, marginTop: 5 }}>
+              Recorded on the report. &ldquo;Five the teacher selected herself&rdquo; and &ldquo;five at random&rdquo; carry very different weight in a later review.
+            </div>
+          </div>
+          <div className="muted" style={{ marginTop: 10 }}>Campus is fixed to <b>{campusName}</b> for your ID. Class Band sets which checking-frequency schedule applies ({CLASS_BAND_LABEL[classBand]}).</div>
         </div>
       )}
 
@@ -173,7 +211,7 @@ export default function VerifyClient({ campusName, coordinatorName }: { campusNa
           <ReportView r={report} />
           <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
             <button className="btn btn-ghost" onClick={() => router.push("/reports")}>Done — view my reports</button>
-            <button className="btn btn-ghost" onClick={() => { setReport(null); setStudents([emptyStudent()]); setAcademic({ teacher: "", cls: "", subject: "" }); setStep(0); }}>New verification</button>
+            <button className="btn btn-ghost" onClick={() => { setReport(null); setStudents([emptyStudent()]); setAcademic({ teacher: "", cls: "", subject: "" }); setFacultyId(null); setStep(0); }}>New verification</button>
           </div>
         </div>
       )}
