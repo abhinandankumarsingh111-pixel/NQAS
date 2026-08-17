@@ -93,3 +93,26 @@ textarea.input { resize: vertical; line-height: 1.55; font-family: var(--font-bo
   .fac-figs { margin-left: 0; width: 100%; }
   .tl-date { flex-basis: 68px; }
 }
+
+/* --- teacher picker (verification form) --- */
+.tp { position: relative; }
+.tp-picked {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border: 1.5px solid var(--teal); border-radius: 8px; padding: 8px 10px 8px 12px;
+  background: rgba(46,158,158,.06);
+}
+.tp-list { display: flex; flex-direction: column; margin-top: 6px; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+.tp-opt {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 9px 12px; background: #fff; border: none; border-bottom: 1px solid var(--line-soft);
+  text-align: left; cursor: pointer; font-size: 13.5px; font-family: var(--font-body);
+}
+.tp-opt:last-child { border-bottom: none; }
+.tp-opt:hover { background: var(--paper); }
+.tp-note { margin-top: 7px; font-size: 12.5px; color: var(--sub); }
+.tp-add { margin-top: 8px; }
+.tp-confirm {
+  margin-top: 10px; border: 1.5px solid var(--gold-dk); border-radius: 8px;
+  padding: 12px 14px; background: rgba(212,172,13,.06); font-size: 13px; line-height: 1.55;
+}
+.tp-sugg { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
