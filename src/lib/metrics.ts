@@ -14,7 +14,8 @@
 //
 // Pure and deterministic. No React, no I/O.
 
-import { dayStatus, isTeacherFault, type ClassBand, type DayStatus } from "./observations";
+import { dayStatus, type ClassBand, type DayStatus } from "./observations";
+import { isTeacherFault } from "./attribution";
 
 export const DAY_STATUS_ORDER: DayStatus[] = ["Up-to-date", "Due Soon", "Delayed", "Overdue"];
 
