@@ -17,6 +17,11 @@ export interface StudentResult {
   days: number | null;
   statusTag: StatusTag;
   remark: string;
+  // Persisted so the teacher record can aggregate on observation ids rather
+  // than string-matching the composed prose, and so `days` stays independently
+  // re-derivable from the raw date when a figure is challenged.
+  obs?: string[];
+  lastChecked?: string | null;
 }
 export interface Academic { teacher: string; cls: string; subject: string; classBand: ClassBand }
 export interface ReportMeta { campus: string; coordinatorName: string; date: string }
@@ -168,7 +173,10 @@ export function buildDeterministic(meta: ReportMeta, academic: Academic, student
   const results: StudentResult[] = students.map((s, idx) => {
     const d = daysSince(s.lastChecked, meta.date);
     const tag = statusTag(s.selected, d, academic.classBand);
-    return { name: s.name, days: d, statusTag: tag, remark: remarkTrack1(s, idx) };
+    return {
+      name: s.name, days: d, statusTag: tag, remark: remarkTrack1(s, idx),
+      obs: s.selected, lastChecked: s.lastChecked || null,
+    };
   });
   let recs = consolidateRecs(students.flatMap((s) => s.selected));
   // Recommendations are derived purely from selected observation ids, same blind spot as
