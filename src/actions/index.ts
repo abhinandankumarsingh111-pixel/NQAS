@@ -134,10 +134,25 @@ export async function addCampusAction(_prev: unknown, formData: FormData) {
   const { profile } = await getProfile();
   if (profile?.role !== "owner") return { error: "Not authorised." };
   const name = String(formData.get("campusName") || "").trim();
+  const code = String(formData.get("campusCode") || "").trim().toUpperCase() || null;
   if (!name) return { error: "Enter a campus name." };
   const supabase = createClient();
-  const { error } = await supabase.from("campuses").insert({ name });
-  if (error) return { error: error.message.includes("duplicate") ? "That campus already exists." : error.message };
+
+  // Friendly duplicate check on both name and code, compared case-insensitively
+  // so "KV Global School, Raipur" and "kv global school, raipur" are one campus.
+  // The database enforces the same rule via unique indexes on lower(name) and
+  // upper(code), so a concurrent insert still fails safely at the insert below.
+  const { data: existing } = await supabase.from("campuses").select("name, code");
+  const clash = (existing || []).find(
+    (c) => c.name.trim().toLowerCase() === name.toLowerCase() ||
+           (code !== null && (c.code || "").trim().toUpperCase() === code)
+  );
+  if (clash) return { error: `Already on the roster as "${clash.name}".` };
+
+  const { error } = await supabase.from("campuses").insert({ name, code });
+  if (error) {
+    return { error: /duplicate|unique/i.test(error.message) ? "That campus is already on the roster." : error.message };
+  }
   revalidatePath("/admin");
   return { ok: `Added campus "${name}".` };
 }
