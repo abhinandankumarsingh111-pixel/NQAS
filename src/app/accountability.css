@@ -116,3 +116,16 @@ textarea.input { resize: vertical; line-height: 1.55; font-family: var(--font-bo
   padding: 12px 14px; background: rgba(212,172,13,.06); font-size: 13px; line-height: 1.55;
 }
 .tp-sugg { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+
+/* --- attribution split on reports ---
+   A pupil-side flag (missing index, gaps in the child's own entries) must not
+   read as a mark against the teacher, so it sits beneath her checking status
+   in a quieter treatment rather than replacing it. */
+.pupil-flag {
+  margin-top: 4px; font-size: 10px; font-weight: 600; letter-spacing: .3px;
+  color: var(--gold-dk); white-space: nowrap;
+}
+.pupil-note {
+  margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: var(--sub);
+  font-style: italic; border-left: 2px solid var(--gold-soft); padding-left: 9px;
+}
