@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-import { STATUS_META, studentTag, tagColor, CLASS_BAND_LABEL, type ClassBand } from "@/lib/observations";
+import { STATUS_META, tagColor, CLASS_BAND_LABEL, type ClassBand } from "@/lib/observations";
+import { splitStatus } from "@/lib/attribution";
 
 export interface ReportStudent {
   name: string;
@@ -22,16 +23,21 @@ export interface ReportData {
   engine: string;
 }
 
-function statusLabel(s: ReportStudent): string {
-  const tag = studentTag(s);
+function labelFor(tag: string): string {
   const emoji = (STATUS_META as Record<string, { emoji: string }>)[tag]?.emoji;
   return emoji ? `${emoji} ${tag}` : tag;
 }
-
 function wordHTML(r: ReportData, watermark: string) {
   const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const rows = r.students.map((s) =>
-    `<tr><td style="border:1px solid #ccc;padding:6px;">${esc(s.name || "—")}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.days == null ? "—" : s.days}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${esc(statusLabel(s))}</td><td style="border:1px solid #ccc;padding:6px;">${esc(s.remark)}</td></tr>`).join("");
+  const rows = r.students.map((s) => {
+    const sp = splitStatus(s, r.academic.classBand);
+    const status = esc(labelFor(sp.teacher)) +
+      (sp.pupil ? `<div style="font-size:10px;color:#7a5c00;margin-top:3px;">${esc(sp.pupil)} — pupil's own upkeep</div>` : "");
+    return `<tr><td style="border:1px solid #ccc;padding:6px;">${esc(s.name || "—")}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.days == null ? "—" : s.days}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${status}</td><td style="border:1px solid #ccc;padding:6px;">${esc(s.remark)}</td></tr>`;
+  }).join("");
+  const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupil).length;
+  const pupilNote = pupilFlagged
+    ? `<p style="font-size:11px;color:#5b616e;margin:6px 0 0;font-style:italic;">${pupilFlagged} notebook${pupilFlagged === 1 ? "" : "s"} carries a flag raised by the pupil's own index or documentation, not by the teacher's checking — the checking status is shown first.</p>` : "";
   const classBandRow = r.academic.classBand
     ? `<tr><td><b>Class Band:</b> ${esc(CLASS_BAND_LABEL[r.academic.classBand])}</td><td></td><td></td></tr>` : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;color:#20242e;position:relative;">
@@ -47,7 +53,7 @@ function wordHTML(r: ReportData, watermark: string) {
     <h2 style="text-align:center;color:#0A3F6B;margin:16px 0 4px;">Notebook Verification Report</h2>
     <table style="width:100%;font-size:13px;margin:10px 0;"><tr><td><b>Teacher:</b> ${esc(r.academic.teacher)}</td><td><b>Class:</b> ${esc(r.academic.cls)}</td><td><b>Subject:</b> ${esc(r.academic.subject)}</td></tr>
     <tr><td><b>Date:</b> ${esc(r.meta.date)}</td><td><b>Coordinator:</b> ${esc(r.meta.coordinatorName)}</td><td><b>Samples:</b> ${r.students.length}</td></tr>${classBandRow}</table>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;"><thead><tr style="background:#0A3F6B;color:#fff;"><th style="border:1px solid #ccc;padding:6px;text-align:left;">Student</th><th style="border:1px solid #ccc;padding:6px;">Days Since Checked</th><th style="border:1px solid #ccc;padding:6px;">Status</th><th style="border:1px solid #ccc;padding:6px;text-align:left;">Observations</th></tr></thead><tbody>${rows}</tbody></table>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;"><thead><tr style="background:#0A3F6B;color:#fff;"><th style="border:1px solid #ccc;padding:6px;text-align:left;">Student</th><th style="border:1px solid #ccc;padding:6px;">Days Since Checked</th><th style="border:1px solid #ccc;padding:6px;">Status</th><th style="border:1px solid #ccc;padding:6px;text-align:left;">Observations</th></tr></thead><tbody>${rows}</tbody></table>${pupilNote}
     <h3 style="color:#026874;margin:16px 0 4px;">Final Observation</h3><p style="font-size:13px;line-height:1.6;">${esc(r.finalObservation)}</p>
     <h3 style="color:#026874;margin:16px 0 4px;">Recommended Corrective Actions</h3><ul style="font-size:13px;">${r.recs.map((x) => `<li>${esc(x)}</li>`).join("") || "<li>No corrective action is required at this stage.</li>"}</ul>
     <h3 style="color:#026874;margin:16px 0 4px;">Principal Summary</h3><p style="font-size:13px;line-height:1.6;">${esc(r.principalSummary)}</p>
@@ -59,6 +65,7 @@ function wordHTML(r: ReportData, watermark: string) {
 
 export default function ReportView({ r }: { r: ReportData }) {
   const [copied, setCopied] = useState(false);
+  const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupil).length;
 
   const downloadWord = async () => {
     const logoRes = await fetch("/logo-symbol.png");
@@ -118,16 +125,26 @@ export default function ReportView({ r }: { r: ReportData }) {
             <div className="scroll-x">
               <table className="rt">
                 <thead><tr><th>Student</th><th>Days</th><th>Status</th><th style={{ textAlign: "left" }}>Observations</th></tr></thead>
-                <tbody>{r.students.map((s, i) => (
-                  <tr key={i} style={{ background: i % 2 ? "#fafaf7" : "#fff" }}>
-                    <td>{s.name || "—"}</td><td style={{ textAlign: "center" }}>{s.days ?? "—"}</td>
-                    <td style={{ textAlign: "center" }}>
-                      <span className="band" style={{ background: tagColor(studentTag(s)) }}>{statusLabel(s)}</span>
-                    </td>
-                    <td>{s.remark}</td>
-                  </tr>))}</tbody>
+                <tbody>{r.students.map((s, i) => {
+                  const sp = splitStatus(s, r.academic.classBand);
+                  return (
+                    <tr key={i} style={{ background: i % 2 ? "#fafaf7" : "#fff" }}>
+                      <td>{s.name || "—"}</td><td style={{ textAlign: "center" }}>{s.days ?? "—"}</td>
+                      <td style={{ textAlign: "center" }}>
+                        <span className="band" style={{ background: tagColor(sp.teacher) }}>{labelFor(sp.teacher)}</span>
+                        {sp.pupil && <div className="pupil-flag">{sp.pupil} · pupil</div>}
+                      </td>
+                      <td>{s.remark}</td>
+                    </tr>);
+                })}</tbody>
               </table>
             </div>
+            {pupilFlagged > 0 && (
+              <div className="pupil-note">
+                {pupilFlagged} notebook{pupilFlagged === 1 ? "" : "s"} above {pupilFlagged === 1 ? "carries" : "carry"} a flag raised by
+                the pupil&rsquo;s own index or documentation, not by the teacher&rsquo;s checking — the checking status is shown first.
+              </div>
+            )}
             <h3>Final Observation</h3><p style={{ margin: "0 0 13px" }}>{r.finalObservation}</p>
             <h3>Recommended Corrective Actions</h3>
             {r.recs.length ? <ul style={{ margin: "0 0 13px", paddingLeft: 20 }}>{r.recs.map((x, i) => <li key={i} style={{ marginBottom: 4 }}>{x}</li>)}</ul>

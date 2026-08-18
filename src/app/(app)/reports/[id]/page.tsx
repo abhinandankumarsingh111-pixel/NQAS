@@ -25,7 +25,7 @@ export default async function SingleReport({ params }: { params: { id: string } 
 
   const report: ReportData = {
     meta: { campus: campus?.name || "—", coordinatorName: r.coordinator_name, date: r.date },
-    academic: { teacher: r.teacher, cls: r.class, subject: r.subject },
+    academic: { teacher: r.teacher, cls: r.class, subject: r.subject, classBand: r.class_band },
     students: r.students || [],
     recs: r.recs || [],
     finalObservation: r.final_observation,

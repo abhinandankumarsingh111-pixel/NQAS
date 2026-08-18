@@ -1,11 +1,8 @@
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
-import { ALL_STATUS_ORDER, studentTag } from "@/lib/observations";
+import { worstTeacherTag } from "@/lib/attribution";
 import ReportListItem, { type ReportRow } from "@/components/ReportListItem";
 import CampusSelect from "@/components/CampusSelect";
-
-const worseTag = (a: string, b: string) =>
-  (ALL_STATUS_ORDER.indexOf(b) > ALL_STATUS_ORDER.indexOf(a) ? b : a);
 
 export default async function ReportsPage({ searchParams }: { searchParams: { campus?: string } }) {
   const { profile } = await getProfile();
@@ -34,7 +31,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: { ca
     id: r.id, subject: r.subject, class: r.class, teacher: r.teacher,
     campusName: campusName(r.campus_id), date: r.date, coordinator_name: r.coordinator_name,
     sample_size: r.sample_size,
-    worst: (r.students || []).reduce((w: string, s: { statusTag?: string; band?: string }) => worseTag(w, studentTag(s)), "Up-to-date"),
+    worst: worstTeacherTag(r.students || [], r.class_band),
   }));
 
   const heading = profile.role === "coordinator" ? "My Reports"

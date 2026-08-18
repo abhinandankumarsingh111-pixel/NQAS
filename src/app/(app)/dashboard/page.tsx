@@ -1,22 +1,24 @@
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
-import { ALL_STATUS_ORDER, studentTag, tagColor } from "@/lib/observations";
+import { ALL_STATUS_ORDER, studentTag, tagColor, type ClassBand } from "@/lib/observations";
+import { worstTeacherTag } from "@/lib/attribution";
 import ReportListItem, { type ReportRow } from "@/components/ReportListItem";
 import CampusSelect from "@/components/CampusSelect";
 import MonthSelect, { type MonthOption } from "@/components/MonthSelect";
 
-const worseTag = (a: string, b: string) =>
-  (ALL_STATUS_ORDER.indexOf(b) > ALL_STATUS_ORDER.indexOf(a) ? b : a);
 
 // Any single report's most severe outcome, treated as a "serious concern"
 // for the summary stat card. Covers both the legacy band words and the
 // current NVS status tags.
 const SERIOUS_TAGS = new Set(["Critical", "Overdue", "Major Concern"]);
 
-type StudentRow = { statusTag?: string; band?: string };
+// `days` is needed to recover the teacher's checking status where a pupil-side
+// override (Index Missing / Documentation Issue) replaced it.
+type StudentRow = { statusTag?: string; band?: string; days?: number | null };
 type Report = {
   id: string; campus_id: string | null; subject: string; class: string; teacher: string;
   date: string; coordinator_name: string; sample_size: number;
+  class_band: ClassBand | null;
   students: StudentRow[] | null;
 };
 
@@ -66,6 +68,11 @@ function computeStats(reps: Report[], camps: { id: string; name: string }[]) {
 
   // Tally whatever tag vocabulary actually appears in the data — old reports
   // and new reports can coexist and both display correctly.
+  //
+  // These org-wide tallies deliberately keep the STORED tag. "Documentation
+  // Issue" here means a notebook genuinely has one, which is true and worth
+  // knowing; unlike the per-report badge, this count is never shown against an
+  // individual teacher's name.
   const tally: Record<string, number> = {};
   reps.forEach((r) => (r.students || []).forEach((s) => {
     const t = studentTag(s);
@@ -79,8 +86,10 @@ function computeStats(reps: Report[], camps: { id: string; name: string }[]) {
   return { totalStudents, serious, reportingCampuses, perCampus, maxCampus, tagCount, maxTag };
 }
 
+// The badge shown beside a teacher's name in the report list. Teacher-side
+// only: a pupil's missing index is not a mark against her checking.
 function reportWorst(r: Report): string {
-  return (r.students || []).reduce((w: string, s: StudentRow) => worseTag(w, studentTag(s)), "Up-to-date");
+  return worstTeacherTag((r.students || []) as StudentRow[], r.class_band);
 }
 
 export default async function Dashboard({ searchParams }: { searchParams: { campus?: string; month?: string } }) {
