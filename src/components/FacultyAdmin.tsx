@@ -69,6 +69,14 @@ export default function FacultyAdmin({
         </div>
       </div>
 
+      {code.toUpperCase().startsWith("TEMP-") && (
+        <div className="notice" style={{ marginTop: 10, marginBottom: 0 }}>
+          <b>Provisional identifier.</b> A coordinator recorded this as a different person sharing a name
+          with someone already on this campus. Replace <b>{code}</b> with the real employee code so the two
+          are permanently distinguishable.
+        </div>
+      )}
+
       <label className="label" style={{ marginTop: 10 }}>Subjects handled</label>
       <input className="input" value={subjectText} onChange={(e) => setSubjectText(e.target.value)}
         placeholder="e.g. Maths, Science — separate with commas" />
