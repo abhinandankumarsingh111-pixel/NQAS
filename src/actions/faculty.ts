@@ -170,3 +170,59 @@ export async function mergeFacultyAction(
   revalidatePath(`/faculty/${targetId}`);
   return { ok: true, moved: (moved || []).length };
 }
+
+// ------------------------------------------------------------
+// COORDINATOR-CALLABLE: a genuinely different person with the same name.
+//
+// Names are unique per campus unless an employee code tells two people apart,
+// and only the owner can set one. That left a coordinator who meets a second
+// "Sunita Sharma" mid-verification with no way forward — and a blocked
+// coordinator does not stop, she picks the existing Sunita and files the
+// verification onto the wrong person's permanent record.
+//
+// So the escape hatch stays open: a provisional TEMP- code is minted, the new
+// record is genuinely distinct, and it is flagged for the owner to replace with
+// the real code. Nothing is ever silently merged into the wrong person.
+// ------------------------------------------------------------
+export async function addDistinctFacultyAction(
+  campusId: string, rawName: string, rawSubject?: string,
+): Promise<{ ok: boolean; id?: string; name?: string; subject?: string | null; error?: string }> {
+  const { profile, user } = await getProfile();
+  if (!profile || !user) return { ok: false, error: "Not authorised." };
+
+  const name = String(rawName || "").trim().replace(/\s+/g, " ");
+  const subject = String(rawSubject || "").trim().replace(/\s+/g, " ") || null;
+  if (name.length < 2) return { ok: false, error: "Enter the teacher's full name." };
+
+  const targetCampus = ["owner", "management"].includes(profile.role) ? campusId : profile.campus_id;
+  if (!targetCampus) return { ok: false, error: "No campus on your account." };
+
+  const supabase = createClient();
+  const { data: sameName } = await supabase
+    .from("faculty").select("id, name, employee_code").eq("campus_id", targetCampus);
+  const clashes = (sameName || []).filter(
+    (f: { name: string }) => f.name.trim().toLowerCase() === name.toLowerCase());
+  if (clashes.length === 0) {
+    return { ok: false, error: "No one of that name here yet — add them the usual way." };
+  }
+
+  const code = `TEMP-${clashes.length + 1}`;
+  const { data, error } = await supabase.from("faculty")
+    .insert({ campus_id: targetCampus, name, subjects: subject ? [subject] : [], employee_code: code })
+    .select("id, name, subject").single();
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("faculty_postings").insert({ faculty_id: data.id, campus_id: targetCampus });
+  await supabase.from("faculty_audit").insert({
+    faculty_id: data.id, action: "created",
+    detail: {
+      source: "verification form — declared a different person with the same name",
+      provisional_code: code,
+      needs_owner_review: "Replace the provisional code with the real employee code.",
+    },
+    actor_id: user.id, actor_name: profile.name,
+  });
+
+  revalidatePath("/faculty");
+  return { ok: true, id: data.id, name: data.name, subject: data.subject };
+}

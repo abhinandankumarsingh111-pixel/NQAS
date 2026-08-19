@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { addFacultyAction } from "@/actions";
+import { addDistinctFacultyAction } from "@/actions/faculty";
 import { canonical, findExact, findSimilar, normaliseName } from "@/lib/similarity";
 
 export interface Fac { id: string; name: string; subject: string | null }
@@ -14,7 +15,8 @@ export interface Fac { id: string; name: string; subject: string | null }
  * The gates SUGGEST, never BLOCK. Adding is always one tap away, because a
  * coordinator blocked mid-verification will pick whichever nearby name clears
  * the screen — and a verification filed against the wrong teacher is far worse
- * than a duplicate row.
+ * than a duplicate row. That includes the case where the name genuinely belongs
+ * to two different people: see the "different person" path below.
  */
 export default function TeacherPicker({
   faculty, campusId, valueId, valueName, onPick,
@@ -28,6 +30,9 @@ export default function TeacherPicker({
   const [q, setQ] = useState("");
   const [subject, setSubject] = useState("");
   const [confirming, setConfirming] = useState(false);
+  // Set when the coordinator declares this is a DIFFERENT person who happens to
+  // share a name with someone already on the list.
+  const [distinct, setDistinct] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -47,11 +52,13 @@ export default function TeacherPicker({
 
   async function create() {
     setBusy(true); setErr(null);
-    const res = await addFacultyAction(campusId, typed, subject);
+    const res = distinct
+      ? await addDistinctFacultyAction(campusId, typed, subject)
+      : await addFacultyAction(campusId, typed, subject);
     setBusy(false);
     if (!res.ok) { setErr(res.error || "Could not add."); return; }
     onPick(res.id!, res.name!, res.subject ?? null);
-    setQ(""); setSubject(""); setConfirming(false);
+    setQ(""); setSubject(""); setConfirming(false); setDistinct(false);
   }
 
   if (valueId) {
@@ -93,6 +100,15 @@ export default function TeacherPicker({
             <div className="tp-note">
               <b>{exact.name}</b> is already on the list
               {exact.subject ? ` (${exact.subject})` : ""} — pick them above rather than adding again.
+              <button type="button"
+                style={{
+                  display: "block", marginTop: 6, padding: 0, background: "none", border: "none",
+                  color: "var(--teal)", fontSize: 12, fontFamily: "var(--font-body)",
+                  textDecoration: "underline", cursor: "pointer",
+                }}
+                onClick={() => { setDistinct(true); setConfirming(true); }}>
+                This is a different person with the same name
+              </button>
             </div>
           ) : (
             <button type="button" className="btn btn-ghost btn-sm tp-add" onClick={() => setConfirming(true)}>
@@ -104,7 +120,14 @@ export default function TeacherPicker({
 
       {confirming && (
         <div className="tp-confirm">
-          {similar.length > 0 && (
+          {distinct && (
+            <div style={{ marginBottom: 10 }}>
+              <b>A second, separate record</b> will be created for {typed}. It is given a provisional
+              identifier so the two are never confused, and flagged for the owner to replace with the
+              real employee code. The existing {typed} is left untouched.
+            </div>
+          )}
+          {!distinct && similar.length > 0 && (
             <>
               <b>Did you mean one of these?</b>
               <div className="tp-sugg">
@@ -132,7 +155,8 @@ export default function TeacherPicker({
             <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={create}>
               {busy ? "Adding…" : `Add ${typed}`}
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(false)}>Cancel</button>
+            <button type="button" className="btn btn-ghost btn-sm"
+              onClick={() => { setConfirming(false); setDistinct(false); }}>Cancel</button>
           </div>
         </div>
       )}
