@@ -6,6 +6,7 @@ import { CLASS_BAND_LABEL, STATUS_META, type ClassBand } from "@/lib/observation
 import RemarkComposer from "@/components/RemarkComposer";
 import AcknowledgeButton from "@/components/AcknowledgeButton";
 import PrintButton from "@/components/PrintButton";
+import FacultyAdmin from "@/components/FacultyAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,17 @@ export default async function TeacherRecord({ params }: { params: { id: string }
       supabase.from("faculty_postings").select("*, campuses(name)").eq("faculty_id", params.id).order("from_date"),
       supabase.from("faculty_previous_names").select("*").eq("faculty_id", params.id).order("changed_on"),
     ]);
+
+  // Owner-only management data. Merge candidates are every OTHER faculty record
+  // the owner can see, so a duplicate created at the wrong campus can still be
+  // folded into the right one.
+  const isOwner = profile.role === "owner";
+  const { data: allCampuses } = isOwner
+    ? await supabase.from("campuses").select("id, name").order("name")
+    : { data: null };
+  const { data: others } = isOwner
+    ? await supabase.from("faculty").select("id, name, subject, campus_id").neq("id", params.id).order("name")
+    : { data: null };
 
   const reports = (mine || []) as (MetricReport & { class: string; subject: string; sample_size: number })[];
   const m = teacherMetrics(reports);
@@ -79,7 +91,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
           <PrintButton />
         </div>
         <div className="muted" style={{ fontSize: 13, marginTop: -4 }}>
-          {f.subject || "Subject not recorded"} · {campus?.name || "—"}
+          {(f.subjects && f.subjects.length ? f.subjects.join(" · ") : f.subject) || "Subject not recorded"} · {campus?.name || "—"}
           {f.employee_code && <> · Employee code {f.employee_code}</>}
         </div>
 
@@ -166,6 +178,26 @@ export default async function TeacherRecord({ params }: { params: { id: string }
           </>
         )}
       </div>
+
+      {isOwner && (
+        <div style={{ marginBottom: 14 }}>
+          <FacultyAdmin
+            faculty={{
+              id: f.id, name: f.name, subjects: f.subjects, subject: f.subject,
+              employee_code: f.employee_code, campus_id: f.campus_id, active: f.active,
+            }}
+            campuses={(allCampuses || []) as { id: string; name: string }[]}
+            mergeCandidates={((others || []) as { id: string; name: string; subject: string | null; campus_id: string }[])
+              .map((o) => ({
+                id: o.id, name: o.name, subject: o.subject,
+                campusName: ((allCampuses || []) as { id: string; name: string }[])
+                  .find((c) => c.id === o.campus_id)?.name || "—",
+              }))}
+            verifications={reports.length}
+            remarks={(remarks || []).length}
+          />
+        </div>
+      )}
 
       {/* ---------------- remarks ---------------- */}
       {canFile && <RemarkComposer facultyId={f.id} facultyName={f.name} campusId={f.campus_id} />}
