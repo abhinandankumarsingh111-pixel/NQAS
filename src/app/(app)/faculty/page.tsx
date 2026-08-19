@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 interface FacultyRow {
   id: string; campus_id: string; name: string;
-  subject: string | null; employee_code: string | null; active: boolean;
+  subject: string | null; employee_code: string | null; active: boolean; subjects: string[] | null;
 }
 
 export default async function FacultyDirectory({
@@ -101,9 +101,12 @@ export default async function FacultyDirectory({
                 <div className="fac-name">
                   {f.name}
                   {!f.active && <span className="fac-chip fac-chip-off">Inactive</span>}
+                  {(f.employee_code || "").toUpperCase().startsWith("TEMP-") && (
+                    <span className="fac-chip fac-chip-off">Needs employee code</span>
+                  )}
                 </div>
                 <div className="fac-sub">
-                  {f.subject || "—"}
+                  {(f.subjects && f.subjects.length ? f.subjects.join(" · ") : f.subject) || "—"}
                   {!isCampusLocked && <> · {campusName(f.campus_id)}</>}
                   {m.verifications > 0 && <> · {m.verifications} verification{m.verifications === 1 ? "" : "s"}, {m.notebooks} notebooks</>}
                   {m.periodTo && <> · last {m.periodTo}</>}
