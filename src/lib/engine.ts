@@ -46,7 +46,10 @@ export function daysSince(last: string, ref: string): number | null {
 // NVS v2.0 status rule. A tag reports the TEACHER'S CHECKING and nothing else.
 //
 //   1. Critical      — no evidence of teacher checking at all. The one genuine
-//                      failure severe enough to override the day count.
+//                      failure severe enough to override the day count. The
+//                      day count reaches the SAME tag on its own once a gap is
+//                      long enough, which is the point: a notebook is critical
+//                      whether nobody checked it or nobody checked it in time.
 //   2. Not recorded  — no last-checked date. Unknown, not a failure; excluded
 //                      from her figures rather than scored against her.
 //   3. Otherwise     — the day-based status for the class band.
@@ -150,12 +153,12 @@ function finalTrack1(results: StudentResult[], inputs: StudentInput[], academic:
     : "";
   const anyCritical = results.some((s) => s.statusTag === "Critical");
   const cats = topCats(results, inputs);
-  // A notebook can land in "concern" purely on elapsed days (Delayed/Overdue) with an
+  // A notebook can land in "concern" purely on elapsed days (Delayed/Critical) with an
   // otherwise clean, all-positive checklist — topCats only sees negative-tag categories,
   // so it can come back empty even though concern > 0. Fall back to naming the day-based
   // lapse itself rather than leaving "chiefly on ___" blank.
   const tail = anyCritical
-    ? "One or more notebooks show critical lapses — with no evidence of checking in the current session — that call for immediate corrective action."
+    ? "One or more notebooks show a critical lapse in checking that calls for immediate corrective action."
     : !concern ? "Standards are being maintained and should be sustained."
     : cats.length ? `The concerns centre chiefly on ${joinC(cats)} and should be addressed in the coming cycle.`
     : concern > 1
@@ -206,10 +209,10 @@ export function buildDeterministic(meta: ReportMeta, academic: Academic, student
   });
   let recs = consolidateRecs(students.flatMap((s) => s.selected));
   // Recommendations are derived purely from selected observation ids, same blind spot as
-  // topCats above. A notebook can be Delayed/Overdue/Critical on elapsed days alone, with
+  // topCats above. A notebook can be Delayed or Critical on elapsed days alone, with
   // no negative observation selected, so recs can come back empty even though a concern
   // exists — leaving the principal's summary to say "No corrective action is required"
-  // right next to a Delayed/Overdue status. Fall back to the standard checking-schedule
+  // right next to a Delayed or Critical status. Fall back to the standard checking-schedule
   // recommendation whenever any student has a non-good status but no rec was derived.
   if (!recs.length && results.some((s) => !GOOD_TAGS.has(s.statusTag) && !UNKNOWN_TAGS.has(s.statusTag))) {
     recs = [RECOMMENDATIONS.regular_checking.text];
