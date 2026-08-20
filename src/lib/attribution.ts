@@ -1,4 +1,4 @@
-import { dayStatus, worseTag, type ClassBand } from "./observations";
+import { dayStatus, worseTag, type ClassBand, type DayStatus } from "./observations";
 
 // ---------------------------------------------------------------------------
 // ATTRIBUTION POLICY — what a teacher may be held to.
@@ -39,22 +39,67 @@ export function teacherFaults(obsIds: string[]): string[] {
   return obsIds.filter(isTeacherFault);
 }
 
-// ---------------------------------------------------------------------------
-// The same policy, applied to STATUS TAGS.
+// ===========================================================================
+// THE TAG RULE
 //
-// statusTag() applies four overrides that REPLACE the day-based status. Two of
-// them describe the pupil's own upkeep, not the teacher's checking:
+// A notebook's status tag reports ONE thing: the teacher's checking standing.
+// Its spine is days-since-checked against the class band. Nothing the child
+// did may set it.
 //
-//   Documentation Issue  — gaps in the child's classwork/homework entries
-//   Index Missing        — the child has not maintained the index
+// The old rule let four overrides replace the day count, two of which
+// described the child's work. It failed in both directions, and the second is
+// the dangerous one:
 //
-// A notebook checked this morning (days = 0) whose owner has not filled in the
-// index was being reported as "Index Missing" beside the teacher's name, which
-// reads as a mark against her. It is not one — she checked it today.
+//   FALSE ALARM   1 day since checked, every teacher signal positive, but the
+//                 child's book was untidy -> reported "Critical".
+//   MISSED ALARM  24 days since checked — a serious lag — but the child had no
+//                 index -> reported "Index Missing", and the lag vanished.
 //
-// "Superficial" and "Critical" stay with the teacher: both describe the
-// checking itself, not the child's work.
-// ---------------------------------------------------------------------------
+// A system built to surface checking lags was concealing them. Hence: the tag
+// comes from her checking; everything else is a flag beside it.
+// ===========================================================================
+
+/** The tag vocabulary. Day-based, plus one genuine failure and one unknown. */
+export type TeacherTag = DayStatus | "Critical" | "Not recorded";
+
+/**
+ * The teacher's own checking faults. These are shown beside the tag and DO
+ * count toward her record — but they describe quality and history, not current
+ * timeliness, so they do not replace the day-based tag. A notebook can honestly
+ * read "Up-to-date · Superficial checking".
+ */
+export const TEACHER_FLAG_LABEL: Readonly<Record<string, string>> = {
+  "CQ.irregular": "Irregular checking",
+  "CQ.not_this_cycle": "Not checked this cycle",
+  "CQ.superficial": "Superficial checking",
+  "CI.long_gap": "Prolonged gap",
+};
+
+/**
+ * The child's own shortcomings. Recorded and displayed so nothing is lost, but
+ * never counted against the teacher and never able to set the tag.
+ *
+ * `CI.not_maintained` sits here deliberately. It is the tick that was turning
+ * same-day checks into "Critical", and coordinators plainly use it to mean the
+ * child's book is a mess — it appears alongside CQ.dated, a POSITIVE teacher
+ * observation. See the relabelling in observations.ts.
+ */
+export const PUPIL_FLAG_LABEL: Readonly<Record<string, string>> = {
+  "DOC.gaps": "Gaps in work",
+  "DOC.missing_hw": "Homework missing",
+  "DOC.undated": "Entries undated",
+  "IDX.partial": "Index incomplete",
+  "IDX.absent": "No index",
+  "SW.untidy": "Untidy work",
+  "SW.incomplete": "Work incomplete",
+  "SW.copied": "Work appears copied",
+  "NP.worn": "Notebook poorly kept",
+  "NP.no_margins": "No margins or headings",
+  "CI.not_maintained": "Notebook not maintained",
+  "CI.no_notebook": "Notebook not produced",
+};
+
+/** LEGACY tags that described the child, not the teacher. */
 export const STUDENT_ATTRIBUTABLE_TAGS: ReadonlySet<string> = new Set([
   "Documentation Issue",
   "Index Missing",
@@ -65,35 +110,59 @@ export function isStudentSideTag(tag: string): boolean {
 }
 
 export interface SplitStatus {
-  /** What the teacher is accountable for: her checking. */
-  teacher: string;
-  /** The pupil-side flag, kept so the child's record is not lost. */
-  pupil: string | null;
+  /** The tag: her checking standing, and nothing else. */
+  tag: string;
+  /** Her own checking faults. Counted toward her record. */
+  teacherFlags: string[];
+  /** The child's shortcomings. Shown, never counted. */
+  pupilFlags: string[];
+  /** True when no last-checked date was recorded, so timeliness is unknown. */
+  unknown: boolean;
 }
 
 /**
- * Separate a stored status into the teacher's checking and the pupil's upkeep.
+ * Split a stored student row into the teacher's tag and the two kinds of flag.
  *
- * Where a pupil-side override hid the real checking status, it is recovered
- * from elapsed days — the same figure the teacher metrics use. Without a class
- * band the thresholds are unknown, so the stored tag is left alone rather than
- * guessed at.
+ * Works for every report vintage. Where observation ids were recorded the flags
+ * are exact; where they were not (reports predating observation capture) the
+ * tag is still recovered from elapsed days, which is what matters most.
+ * Without a class band the thresholds are unknown, so the stored tag is left
+ * alone rather than guessed at.
  */
 export function splitStatus(
-  s: { statusTag?: string; band?: string; days?: number | null },
+  s: { statusTag?: string; band?: string; days?: number | null; obs?: string[] | null },
   classBand?: ClassBand | null,
 ): SplitStatus {
+  const obs = s.obs || [];
+  const teacherFlags = obs.filter((o) => o in TEACHER_FLAG_LABEL).map((o) => TEACHER_FLAG_LABEL[o]);
+  const pupilFlags = obs.filter((o) => o in PUPIL_FLAG_LABEL).map((o) => PUPIL_FLAG_LABEL[o]);
+
+  // No band: thresholds unknown. Fall back to what was recorded, and recover
+  // the pupil-side legacy overrides at least as flags.
   const stored = s.statusTag || s.band || "Up-to-date";
-  if (!isStudentSideTag(stored)) return { teacher: stored, pupil: null };
-  if (!classBand) return { teacher: stored, pupil: null };
-  return { teacher: dayStatus(s.days ?? null, classBand), pupil: stored };
+  if (!classBand) {
+    const legacy = isStudentSideTag(stored) ? [stored] : [];
+    return { tag: stored, teacherFlags, pupilFlags: [...new Set([...pupilFlags, ...legacy])], unknown: false };
+  }
+
+  // No evidence of any checking is the one genuine teacher failure severe
+  // enough to override the day count.
+  if (obs.includes("CI.no_teacher_check")) {
+    return { tag: "Critical", teacherFlags, pupilFlags, unknown: false };
+  }
+  // A missing date is an absence of evidence, not a failure. It must not be
+  // scored against her, so it is named plainly and excluded from her figures.
+  if (s.days == null) {
+    return { tag: "Not recorded", teacherFlags, pupilFlags, unknown: true };
+  }
+  return { tag: dayStatus(s.days, classBand), teacherFlags, pupilFlags, unknown: false };
 }
 
-/** Worst teacher-side status across a set of notebooks. */
+/** Worst teacher-side tag across a set of notebooks. */
 export function worstTeacherTag(
-  students: { statusTag?: string; band?: string; days?: number | null }[],
+  students: { statusTag?: string; band?: string; days?: number | null; obs?: string[] | null }[],
   classBand?: ClassBand | null,
 ): string {
   return (students || []).reduce(
-    (w, s) => worseTag(w, splitStatus(s, classBand).teacher), "Up-to-date");
+    (w, s) => worseTag(w, splitStatus(s, classBand).tag), "Up-to-date");
 }
