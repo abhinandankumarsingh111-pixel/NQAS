@@ -7,9 +7,9 @@ import CampusSelect from "@/components/CampusSelect";
 import MonthSelect, { type MonthOption } from "@/components/MonthSelect";
 
 
-// Any single report's most severe outcome, treated as a "serious concern"
-// for the summary stat card. Covers both the legacy band words and the
-// current NVS status tags.
+// What counts for the "Critical notebooks" stat card. "Critical" is the current
+// name for the worst tier; "Overdue" is its retired name and "Major Concern" is
+// the legacy band word, both kept so a stored tag from either era still counts.
 const SERIOUS_TAGS = new Set(["Critical", "Overdue", "Major Concern"]);
 
 // `days` recovers the teacher's checking status; `obs` separates her own
@@ -69,10 +69,10 @@ function computeStats(reps: Report[], camps: { id: string; name: string }[]) {
   //
   // These counts were previously tallied from the STORED tag, on the reasoning
   // that an org-wide census of notebook condition is worth having and is never
-  // shown against an individual name. But "Serious concerns" is read as a
+  // shown against an individual name. But "Critical notebooks" is read as a
   // judgement of checking, and the stored tag broke it in both directions: a
-  // child's untidy notebook counted as a serious concern, while a genuine
-  // 24-day lag hid behind "Index Missing" and counted as nothing.
+  // child's untidy notebook counted as one, while a genuine 24-day lag hid
+  // behind "Index Missing" and counted as nothing.
   //
   // So the distribution reports her checking, and the census that reasoning was
   // protecting is kept as `pupilFlagged` and stated plainly beneath it.
@@ -140,10 +140,10 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
           <div className="row" style={{ marginBottom: 16 }}>
             <div className="stat"><b>{reps.length}</b><span>Reports stored</span></div>
             <div className="stat"><b>{stats.totalStudents}</b><span>Notebooks verified</span></div>
-            <div className="stat"><b style={{ color: stats.serious ? "var(--red)" : "var(--navy)" }}>{stats.serious}</b><span>Serious concerns</span></div>
+            <div className="stat"><b style={{ color: stats.serious ? "var(--red)" : "var(--navy)" }}>{stats.serious}</b><span>Critical notebooks</span></div>
           </div>
           <div style={{ maxWidth: 380 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Status distribution — {monthHeading}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Checking status distribution — {monthHeading}</div>
             {stats.tagCount.map((t) => (
               <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 12, width: 130, color: "var(--ink)" }}>{t.tag}</span>
@@ -214,7 +214,7 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
         <div className="row" style={{ marginBottom: 16 }}>
           <div className="stat"><b>{repsInMonth.length}</b><span>Reports stored</span></div>
           <div className="stat"><b>{stats.totalStudents}</b><span>Notebooks verified</span></div>
-          <div className="stat"><b style={{ color: stats.serious ? "var(--red)" : "var(--navy)" }}>{stats.serious}</b><span>Serious concerns</span></div>
+          <div className="stat"><b style={{ color: stats.serious ? "var(--red)" : "var(--navy)" }}>{stats.serious}</b><span>Critical notebooks</span></div>
           <div className="stat"><b>{stats.reportingCampuses} / {camps.length}</b><span>Campuses reporting</span></div>
         </div>
         <div className="row">
@@ -231,7 +231,7 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
             ))}
           </div>
           <div style={{ flex: "1 1 280px", minWidth: 240 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Status distribution</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 8 }}>Checking status distribution</div>
             {stats.tagCount.map((t) => (
               <div key={t.tag} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 12, width: 130, color: "var(--ink)" }}>{t.tag}</span>
