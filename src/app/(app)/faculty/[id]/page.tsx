@@ -174,6 +174,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
               presentation appear on the reports below but are never counted against a teacher.
               {m.unscored > 0 && <> {m.unscored} notebook{m.unscored === 1 ? "" : "s"} predate observation capture and are excluded from the flag rate.</>}
               {m.undated > 0 && <> {m.undated} notebook{m.undated === 1 ? " has" : "s have"} no recorded checking date, so {m.undated === 1 ? "it is" : "they are"} excluded from these figures rather than counted against her.</>}
+              {m.disputed > 0 && <> {m.disputed} checking observation{m.disputed === 1 ? " is" : "s are"} contradicted by the date recorded beside {m.disputed === 1 ? "it" : "them"}, so {m.disputed === 1 ? "it is" : "they are"} shown on the report but not counted here.</>}
               {m.samplingMethods.length > 0 && <> Sampling: {m.samplingMethods.map((s) => SAMPLING_LABEL[s] || s).join(", ")}.</>}
             </div>
           </>
