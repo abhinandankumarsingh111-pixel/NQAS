@@ -7,7 +7,7 @@ import { saveReportAction } from "@/actions";
 import TeacherPicker, { type Fac } from "@/components/TeacherPicker";
 import ReportView, { type ReportData } from "@/components/ReportView";
 
-const STEPS = ["Details", "Students & Observations", "Preview", "Report"];
+const STEPS = ["Details", "Notebooks & Observations", "Preview", "Report"];
 
 // Five randomly picked notebooks is the standard sample.
 //
@@ -150,13 +150,13 @@ export default function VerifyClient({
           {students.map((s, i) => (
             <div className="card" key={i}>
               <div className="card-h">
-                <h2>Student Sample {i + 1}</h2>
+                <h2>Notebook {i + 1} of {SAMPLE_TARGET}</h2>
                 {students.length > 1 && <button className="btn btn-danger btn-sm" onClick={() => setStudents((a) => a.filter((_, k) => k !== i))}>Remove</button>}
               </div>
               <div className="row">
                 <div style={{ flex: "2 1 200px" }}><label className="label">Student Name</label><input className="input" value={s.name} onChange={(e) => setStudent(i, { name: e.target.value })} /></div>
                 <div style={{ flex: "1 1 150px" }}><label className="label">Last Checked Date</label><input className="input" type="date" value={s.lastChecked} onChange={(e) => setStudent(i, { lastChecked: e.target.value })} /></div>
-                <div style={{ flex: "0 1 120px" }}><label className="label">Days Since (auto)</label><div className="input" style={{ background: "var(--chip)", fontWeight: 700, color: "var(--navy)" }}>{daysSince(s.lastChecked, date) ?? "—"}</div></div>
+                <div style={{ flex: "0 1 120px" }}><label className="label">Days Since Checked</label><div className="input" style={{ background: "var(--chip)", fontWeight: 700, color: "var(--navy)" }}>{daysSince(s.lastChecked, date) ?? "—"}</div></div>
               </div>
               {CATEGORIES.map((cat) => (
                 <div key={cat.id} style={{ marginBottom: 11 }}>

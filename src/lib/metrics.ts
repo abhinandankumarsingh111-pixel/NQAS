@@ -1,6 +1,6 @@
 // Teacher copy-correction metrics.
 //
-// These figures may inform an employment decision, so four rules are load
+// These figures may inform an employment decision, so five rules are load
 // bearing. Each is enforced here rather than left to the caller:
 //
 //  1. ONLY the teacher's own work counts. Student presentation, index and
@@ -9,11 +9,11 @@
 //     The stored tag applies overrides — two of which ("Documentation Issue",
 //     "Index Missing") are the student's doing and would mask a prompt teacher.
 //  3. Raw days are NOT comparable across class bands. 20 days is "Due Soon"
-//     for Class VIII and "Overdue" for Class III. The comparable figure is the
+//     for Class VIII and "Critical" for Class III. The comparable figure is the
 //     band-normalised status distribution.
-//  4. A missing checking date is UNKNOWN, never a failure. dayStatus() returns
-//     "Overdue" for null, so counting it would score a blank field against her
-//     as if she had never checked the book. Undated notebooks are excluded.
+//  4. A missing checking date is UNKNOWN, never a failure. Counting it would
+//     score a blank field against her as if she had never checked the book, so
+//     undated notebooks are excluded from timeliness entirely.
 //  5. A tick the recorded date REFUTES is not counted. "Prolonged gap" on a
 //     notebook checked the same day is one of two entries being wrong, and
 //     there is no way to tell which — so it is reported as disputed rather
@@ -24,7 +24,7 @@
 import { dayStatus, type ClassBand, type DayStatus } from "./observations";
 import { countableFaults, disputedFaults } from "./attribution";
 
-export const DAY_STATUS_ORDER: DayStatus[] = ["Up-to-date", "Due Soon", "Delayed", "Overdue"];
+export const DAY_STATUS_ORDER: DayStatus[] = ["Up-to-date", "Due Soon", "Delayed", "Critical"];
 
 /** Below this many verifications, figures are labelled provisional. */
 export const PROVISIONAL_BELOW = 3;
@@ -53,7 +53,7 @@ export interface TeacherMetrics {
   /** Band-normalised. The headline figure. */
   timeliness: Record<DayStatus, number>;
   timelinessPct: Record<DayStatus, number>;
-  /** Share of notebooks at Delayed or Overdue. */
+  /** Share of notebooks at Delayed or Critical. */
   behindPct: number | null;
   /** Median days, per class band. Never merged across bands — see rule 3. */
   medianDaysByBand: Partial<Record<ClassBand, number>>;
@@ -73,7 +73,7 @@ export interface TeacherMetrics {
 }
 
 const EMPTY_TIMELINESS = (): Record<DayStatus, number> =>
-  ({ "Up-to-date": 0, "Due Soon": 0, Delayed: 0, Overdue: 0 });
+  ({ "Up-to-date": 0, "Due Soon": 0, Delayed: 0, Critical: 0 });
 
 function median(xs: number[]): number | undefined {
   if (!xs.length) return undefined;
@@ -111,7 +111,7 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
       notebooks++;
 
       // Rules 2 and 4: derive from days, never from the stored statusTag,
-      // and treat a missing date as unknown rather than as Overdue.
+      // and treat a missing date as unknown rather than as a lapse.
       if (s.days == null) {
         undated++;
       } else if (r.class_band) {
@@ -148,7 +148,7 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
     periodTo: to,
     timeliness,
     timelinessPct,
-    behindPct: banded ? pct(timeliness.Delayed + timeliness.Overdue, banded) : null,
+    behindPct: banded ? pct(timeliness.Delayed + timeliness.Critical, banded) : null,
     medianDaysByBand,
     faultRate: scored ? pct(faulty, scored) : null,
     criticalCount: critical,

@@ -141,7 +141,11 @@ export default async function TeacherRecord({ params }: { params: { id: string }
               <div className="fig">
                 <div className="fig-n">{m.faultRate ?? "—"}<small>%</small></div>
                 <div className="fig-l">Checking-quality flags</div>
-                <div className="fig-b">{m.criticalCount > 0 ? `${m.criticalCount} critical` : "no critical failures"}</div>
+                {/* Deliberately not the word "critical": that is now the name of a
+                    day-based TAG, and this counts a different thing — ticks for a
+                    prolonged gap or no checking at all. Two meanings, one word,
+                    on the same screen would be worse than a longer label. */}
+                <div className="fig-b">{m.criticalCount > 0 ? `${m.criticalCount} severe` : "none severe"}</div>
               </div>
               <div className="fig">
                 <div className="fig-n">{m.coordinators}</div>
@@ -206,7 +210,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
 
       {/* ---------------- timeline ---------------- */}
       <div className="card">
-        <div className="card-h"><h2>Record</h2></div>
+        <div className="card-h"><h2>Verifications &amp; Remarks</h2></div>
         {timeline.length === 0 ? (
           <div className="muted">Nothing recorded yet.</div>
         ) : timeline.map((t) => t.kind === "report" ? (

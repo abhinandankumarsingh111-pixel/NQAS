@@ -124,19 +124,29 @@ export const CLASS_BAND_LABEL: Record<ClassBand, string> = {
   middle_senior: "VI – X",
 };
 
-export type DayStatus = "Up-to-date" | "Due Soon" | "Delayed" | "Overdue";
 /**
- * LEGACY. These four once overrode the day count. Two of them described the
+ * The four tags a notebook can carry, best to worst.
+ *
+ * The worst tier is CRITICAL, not "Overdue". Both words were in use and they
+ * said different things about the same fact: "Overdue" for a 40-day gap read
+ * as an administrative slip, while "Critical" was reserved for a checkbox.
+ * A notebook a fortnight past its checking schedule in Class III IS the
+ * critical case, and the tag a principal skims should say so.
+ */
+export type DayStatus = "Up-to-date" | "Due Soon" | "Delayed" | "Critical";
+/**
+ * LEGACY. These three once overrode the day count. Two of them described the
  * CHILD's work, so a notebook checked yesterday could be reported as a failure
  * of the teacher — and, worse, a genuine 24-day lag could be hidden behind
  * "Index Missing". Tags are now generated from the teacher's checking alone
- * (see attribution.ts). Kept only so reports recorded under the old rule still
- * render exactly as they were recorded.
+ * (see attribution.ts). Kept only so a stored tag from that era still renders.
  */
-export type OverrideTag = "Critical" | "Superficial" | "Documentation Issue" | "Index Missing";
+export type OverrideTag = "Superficial" | "Documentation Issue" | "Index Missing";
+/** LEGACY. What the worst day-based tier was called before it became Critical. */
+export type RetiredDayTag = "Overdue";
 /** A missing last-checked date is unknown, not a failure. */
 export type UnknownTag = "Not recorded";
-export type StatusTag = OverrideTag | DayStatus | UnknownTag;
+export type StatusTag = OverrideTag | DayStatus | UnknownTag | RetiredDayTag;
 
 const DAY_THRESHOLDS: Record<ClassBand, { upTo: number; dueSoon: number; delayed: number }> = {
   primary: { upTo: 3, dueSoon: 7, delayed: 14 },
@@ -144,18 +154,20 @@ const DAY_THRESHOLDS: Record<ClassBand, { upTo: number; dueSoon: number; delayed
 };
 
 /**
- * Day-based standing. A null date returns "Overdue" for backward compatibility
- * with callers that expect a DayStatus; prefer splitStatus() in
- * attribution.ts, which reports a missing date as "Not recorded" and keeps it
- * out of the teacher's figures instead of scoring it against her.
+ * Day-based standing.
+ *
+ * `days` is deliberately non-nullable. It used to accept null and answer
+ * "Overdue", which quietly scored a blank date field against a teacher as if
+ * she had never checked the book. Every caller must now decide for itself what
+ * a missing date means; splitStatus() in attribution.ts calls it "Not recorded"
+ * and keeps it out of her figures.
  */
-export function dayStatus(days: number | null, classBand: ClassBand): DayStatus {
-  if (days == null) return "Overdue";
+export function dayStatus(days: number, classBand: ClassBand): DayStatus {
   const t = DAY_THRESHOLDS[classBand];
   if (days <= t.upTo) return "Up-to-date";
   if (days <= t.dueSoon) return "Due Soon";
   if (days <= t.delayed) return "Delayed";
-  return "Overdue";
+  return "Critical";
 }
 
 /** True when the elapsed days alone put this notebook past its band's threshold. */
@@ -165,15 +177,20 @@ export function isBehind(days: number | null, classBand: ClassBand): boolean {
 }
 
 export const STATUS_META: Record<StatusTag, { color: string; emoji: string; tone: string }> = {
-  Critical: { color: "#A32020", emoji: "🚨", tone: "critical, with no evidence of checking in the current session" },
-  Superficial: { color: "#922B21", emoji: "❌", tone: "superficially checked, with cursory verification" },
-  "Documentation Issue": { color: "#B9770E", emoji: "📋", tone: "affected by documentation lapses" },
-  "Index Missing": { color: "#7D6608", emoji: "📑", tone: "missing a properly maintained index" },
+  // The four current tags run 🟢 🟡 🟠 🔴 — one ramp, read at a glance.
+  // Critical keeps the plain red dot rather than a siren: it is now the ordinary
+  // name for the worst tier, not a rare alarm, and the tone must cover both ways
+  // a notebook reaches it — a long gap, or no evidence of checking at all.
   "Up-to-date": { color: "#2E9E9E", emoji: "🟢", tone: "up to date" },
   "Due Soon": { color: "#D4AC0D", emoji: "🟡", tone: "due for checking soon" },
   Delayed: { color: "#E07B1A", emoji: "🟠", tone: "delayed in checking" },
-  Overdue: { color: "#A32020", emoji: "🔴", tone: "overdue for checking" },
+  Critical: { color: "#A32020", emoji: "🔴", tone: "critically overdue for checking" },
   "Not recorded": { color: "#8A8F98", emoji: "⚪", tone: "without a recorded checking date" },
+  // Legacy, for any stored tag that still needs rendering.
+  Overdue: { color: "#A32020", emoji: "🔴", tone: "overdue for checking" },
+  Superficial: { color: "#922B21", emoji: "❌", tone: "superficially checked, with cursory verification" },
+  "Documentation Issue": { color: "#B9770E", emoji: "📋", tone: "affected by documentation lapses" },
+  "Index Missing": { color: "#7D6608", emoji: "📑", tone: "missing a properly maintained index" },
 };
 
 // Combined severity order across BOTH vocabularies (old bands + new tags),
@@ -182,6 +199,8 @@ export const STATUS_META: Record<StatusTag, { color: string; emoji: string; tone
 // safely regardless of which vintage of report is being read.
 // "Not recorded" sits at the very bottom: it is an absence of evidence, not a
 // degree of failure, and must never win a "worst of" comparison.
+// "Overdue" is the retired name for what is now Critical, so it sits directly
+// below it — a stored one must still outrank everything except Critical itself.
 export const ALL_STATUS_ORDER: string[] = [
   "Not recorded",
   "Excellent", "Up-to-date",

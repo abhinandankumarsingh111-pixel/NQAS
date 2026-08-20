@@ -59,8 +59,8 @@ export function teacherFaults(obsIds: string[]): string[] {
 // comes from her checking; everything else is a flag beside it.
 // ===========================================================================
 
-/** The tag vocabulary. Day-based, plus one genuine failure and one unknown. */
-export type TeacherTag = DayStatus | "Critical" | "Not recorded";
+/** The tag vocabulary. Day-based, plus one unknown. */
+export type TeacherTag = DayStatus | "Not recorded";
 
 /**
  * The teacher's own checking faults. These are shown beside the tag and DO
