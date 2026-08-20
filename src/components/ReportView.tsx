@@ -31,13 +31,16 @@ function wordHTML(r: ReportData, watermark: string) {
   const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const rows = r.students.map((s) => {
     const sp = splitStatus(s, r.academic.classBand);
-    const status = esc(labelFor(sp.teacher)) +
-      (sp.pupil ? `<div style="font-size:10px;color:#7a5c00;margin-top:3px;">${esc(sp.pupil)} — pupil's own upkeep</div>` : "");
+    const flag = (t: string, colour: string) =>
+      `<div style="font-size:10px;color:${colour};margin-top:3px;">${esc(t)}</div>`;
+    const status = esc(labelFor(sp.tag))
+      + sp.teacherFlags.map((f) => flag(`${f} — teacher`, "#922B21")).join("")
+      + sp.pupilFlags.map((f) => flag(`${f} — pupil's own work`, "#7a5c00")).join("");
     return `<tr><td style="border:1px solid #ccc;padding:6px;">${esc(s.name || "—")}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.days == null ? "—" : s.days}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${status}</td><td style="border:1px solid #ccc;padding:6px;">${esc(s.remark)}</td></tr>`;
   }).join("");
-  const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupil).length;
+  const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupilFlags.length).length;
   const pupilNote = pupilFlagged
-    ? `<p style="font-size:11px;color:#5b616e;margin:6px 0 0;font-style:italic;">${pupilFlagged} notebook${pupilFlagged === 1 ? "" : "s"} carries a flag raised by the pupil's own index or documentation, not by the teacher's checking — the checking status is shown first.</p>` : "";
+    ? `<p style="font-size:11px;color:#5b616e;margin:6px 0 0;font-style:italic;">The status shown is the teacher's checking standing, taken from days since last checked. ${pupilFlagged} notebook${pupilFlagged === 1 ? "" : "s"} also ${pupilFlagged === 1 ? "carries a flag" : "carry flags"} raised by the pupil's own work — recorded here, but never counted against the teacher.</p>` : "";
   const classBandRow = r.academic.classBand
     ? `<tr><td><b>Class Band:</b> ${esc(CLASS_BAND_LABEL[r.academic.classBand])}</td><td></td><td></td></tr>` : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;color:#20242e;position:relative;">
@@ -65,7 +68,8 @@ function wordHTML(r: ReportData, watermark: string) {
 
 export default function ReportView({ r }: { r: ReportData }) {
   const [copied, setCopied] = useState(false);
-  const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupil).length;
+  const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupilFlags.length).length;
+  const undated = r.students.filter((s) => splitStatus(s, r.academic.classBand).unknown).length;
 
   const downloadWord = async () => {
     const logoRes = await fetch("/logo-symbol.png");
@@ -131,18 +135,27 @@ export default function ReportView({ r }: { r: ReportData }) {
                     <tr key={i} style={{ background: i % 2 ? "#fafaf7" : "#fff" }}>
                       <td>{s.name || "—"}</td><td style={{ textAlign: "center" }}>{s.days ?? "—"}</td>
                       <td style={{ textAlign: "center" }}>
-                        <span className="band" style={{ background: tagColor(sp.teacher) }}>{labelFor(sp.teacher)}</span>
-                        {sp.pupil && <div className="pupil-flag">{sp.pupil} · pupil</div>}
+                        <span className="band" style={{ background: tagColor(sp.tag) }}>{labelFor(sp.tag)}</span>
+                        {sp.teacherFlags.map((f) => <div key={f} className="teacher-flag">{f} · teacher</div>)}
+                        {sp.pupilFlags.map((f) => <div key={f} className="pupil-flag">{f} · pupil</div>)}
                       </td>
                       <td>{s.remark}</td>
                     </tr>);
                 })}</tbody>
               </table>
             </div>
-            {pupilFlagged > 0 && (
+            {(pupilFlagged > 0 || undated > 0) && (
               <div className="pupil-note">
-                {pupilFlagged} notebook{pupilFlagged === 1 ? "" : "s"} above {pupilFlagged === 1 ? "carries" : "carry"} a flag raised by
-                the pupil&rsquo;s own index or documentation, not by the teacher&rsquo;s checking — the checking status is shown first.
+                {pupilFlagged > 0 && (
+                  <>The status shown is the teacher&rsquo;s checking standing, taken from days since last checked.
+                  {" "}{pupilFlagged} notebook{pupilFlagged === 1 ? "" : "s"} also {pupilFlagged === 1 ? "carries a flag" : "carry flags"} raised
+                  by the pupil&rsquo;s own work — recorded here, but never counted against the teacher.</>
+                )}
+                {undated > 0 && (
+                  <>{pupilFlagged > 0 ? " " : ""}{undated} notebook{undated === 1 ? " has" : "s have"} no recorded checking
+                  date, so {undated === 1 ? "its" : "their"} timeliness is unknown and {undated === 1 ? "it is" : "they are"} excluded
+                  from the teacher&rsquo;s figures rather than counted against her.</>
+                )}
               </div>
             )}
             <h3>Final Observation</h3><p style={{ margin: "0 0 13px" }}>{r.finalObservation}</p>
