@@ -62,7 +62,13 @@ export const OBSERVATIONS: Observation[] = [
   { id: "NP.no_margins", cat: "NP", label: "No margins/headings", pol: "negative", impact: "low", frag: "margins and headings are not maintained", rec: "presentation" },
 
   { id: "CI.none", cat: "CI", label: "No critical issues", pol: "positive", impact: "low", frag: "no critical issues were observed" },
-  { id: "CI.not_maintained", cat: "CI", label: "Notebook not maintained", pol: "negative", impact: "critical", frag: "the notebook is effectively not being maintained", rec: "escalate", crit: 2 },
+  // Reworded: "notebook not maintained" read ambiguously — teacher or child? —
+  // and coordinators were plainly using it for the child's upkeep, ticking it
+  // alongside CQ.dated (a positive teacher observation). Under the old rule it
+  // forced "Critical" onto notebooks checked the same day. It is now clearly
+  // the pupil's, and no longer sets the tag. Impact stays critical so it still
+  // escalates; see attribution.ts for what may and may not set a tag.
+  { id: "CI.not_maintained", cat: "CI", label: "Notebook poorly kept by student", pol: "negative", impact: "critical", frag: "the notebook is poorly kept by the student", rec: "escalate", crit: 2 },
   { id: "CI.no_teacher_check", cat: "CI", label: "No teacher checking at all", pol: "negative", impact: "critical", frag: "there is no evidence of teacher checking at all", rec: "escalate", crit: 2 },
   { id: "CI.long_gap", cat: "CI", label: "Prolonged gap", pol: "negative", impact: "critical", frag: "there has been a prolonged gap since the last checking", rec: "escalate", crit: 1 },
   { id: "CI.no_notebook", cat: "CI", label: "Notebook not produced", pol: "negative", impact: "critical", frag: "the student was unable to produce the notebook", rec: "escalate", crit: 1 },
@@ -110,14 +116,30 @@ export const CLASS_BAND_LABEL: Record<ClassBand, string> = {
 };
 
 export type DayStatus = "Up-to-date" | "Due Soon" | "Delayed" | "Overdue";
+/**
+ * LEGACY. These four once overrode the day count. Two of them described the
+ * CHILD's work, so a notebook checked yesterday could be reported as a failure
+ * of the teacher — and, worse, a genuine 24-day lag could be hidden behind
+ * "Index Missing". Tags are now generated from the teacher's checking alone
+ * (see attribution.ts). Kept only so reports recorded under the old rule still
+ * render exactly as they were recorded.
+ */
 export type OverrideTag = "Critical" | "Superficial" | "Documentation Issue" | "Index Missing";
-export type StatusTag = OverrideTag | DayStatus;
+/** A missing last-checked date is unknown, not a failure. */
+export type UnknownTag = "Not recorded";
+export type StatusTag = OverrideTag | DayStatus | UnknownTag;
 
 const DAY_THRESHOLDS: Record<ClassBand, { upTo: number; dueSoon: number; delayed: number }> = {
   primary: { upTo: 3, dueSoon: 7, delayed: 14 },
   middle_senior: { upTo: 15, dueSoon: 30, delayed: 40 },
 };
 
+/**
+ * Day-based standing. A null date returns "Overdue" for backward compatibility
+ * with callers that expect a DayStatus; prefer splitStatus() in
+ * attribution.ts, which reports a missing date as "Not recorded" and keeps it
+ * out of the teacher's figures instead of scoring it against her.
+ */
 export function dayStatus(days: number | null, classBand: ClassBand): DayStatus {
   if (days == null) return "Overdue";
   const t = DAY_THRESHOLDS[classBand];
@@ -125,6 +147,12 @@ export function dayStatus(days: number | null, classBand: ClassBand): DayStatus 
   if (days <= t.dueSoon) return "Due Soon";
   if (days <= t.delayed) return "Delayed";
   return "Overdue";
+}
+
+/** True when the elapsed days alone put this notebook past its band's threshold. */
+export function isBehind(days: number | null, classBand: ClassBand): boolean {
+  if (days == null) return false;
+  return days > DAY_THRESHOLDS[classBand].dueSoon;
 }
 
 export const STATUS_META: Record<StatusTag, { color: string; emoji: string; tone: string }> = {
@@ -136,13 +164,17 @@ export const STATUS_META: Record<StatusTag, { color: string; emoji: string; tone
   "Due Soon": { color: "#D4AC0D", emoji: "🟡", tone: "due for checking soon" },
   Delayed: { color: "#E07B1A", emoji: "🟠", tone: "delayed in checking" },
   Overdue: { color: "#A32020", emoji: "🔴", tone: "overdue for checking" },
+  "Not recorded": { color: "#8A8F98", emoji: "⚪", tone: "without a recorded checking date" },
 };
 
 // Combined severity order across BOTH vocabularies (old bands + new tags),
 // least to most severe. A single report only ever uses one vocabulary
 // internally, but this shared order lets "worst of" comparisons work
 // safely regardless of which vintage of report is being read.
+// "Not recorded" sits at the very bottom: it is an absence of evidence, not a
+// degree of failure, and must never win a "worst of" comparison.
 export const ALL_STATUS_ORDER: string[] = [
+  "Not recorded",
   "Excellent", "Up-to-date",
   "Satisfactory", "Due Soon",
   "Needs Improvement", "Delayed", "Index Missing",

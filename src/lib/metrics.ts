@@ -1,6 +1,6 @@
 // Teacher copy-correction metrics.
 //
-// These figures may inform an employment decision, so three rules are load
+// These figures may inform an employment decision, so four rules are load
 // bearing. Each is enforced here rather than left to the caller:
 //
 //  1. ONLY the teacher's own work counts. Student presentation, index and
@@ -11,6 +11,9 @@
 //  3. Raw days are NOT comparable across class bands. 20 days is "Due Soon"
 //     for Class VIII and "Overdue" for Class III. The comparable figure is the
 //     band-normalised status distribution.
+//  4. A missing checking date is UNKNOWN, never a failure. dayStatus() returns
+//     "Overdue" for null, so counting it would score a blank field against her
+//     as if she had never checked the book. Undated notebooks are excluded.
 //
 // Pure and deterministic. No React, no I/O.
 
@@ -57,6 +60,8 @@ export interface TeacherMetrics {
   coordinators: number;
   /** Notebooks with no observation ids recorded (pre-fix reports). */
   unscored: number;
+  /** Notebooks with no last-checked date. Excluded from timeliness entirely. */
+  undated: number;
   provisional: boolean;
   samplingMethods: string[];
 }
@@ -84,7 +89,7 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
   const daysByBand: Partial<Record<ClassBand, number[]>> = {};
   const coordinators = new Set<string>();
   const sampling = new Set<string>();
-  let notebooks = 0, faulty = 0, critical = 0, unscored = 0, scored = 0;
+  let notebooks = 0, faulty = 0, critical = 0, unscored = 0, scored = 0, undated = 0;
   let from: string | null = null, to: string | null = null;
 
   for (const r of reports) {
@@ -99,10 +104,13 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
     for (const s of r.students || []) {
       notebooks++;
 
-      // Rule 2: derive from days, never from the stored statusTag.
-      if (r.class_band) {
+      // Rules 2 and 4: derive from days, never from the stored statusTag,
+      // and treat a missing date as unknown rather than as Overdue.
+      if (s.days == null) {
+        undated++;
+      } else if (r.class_band) {
         timeliness[dayStatus(s.days, r.class_band)]++;
-        if (s.days != null) (daysByBand[r.class_band] ||= []).push(s.days);
+        (daysByBand[r.class_band] ||= []).push(s.days);
       }
 
       // Rule 1: only the teacher's own faults.
@@ -138,6 +146,7 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
     criticalCount: critical,
     coordinators: coordinators.size,
     unscored,
+    undated,
     provisional: reports.length < PROVISIONAL_BELOW,
     samplingMethods: [...sampling],
   };
