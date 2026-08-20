@@ -87,10 +87,17 @@ export const RECOMMENDATIONS: Record<string, { order: number; text: string }> = 
 };
 
 // ---------------------------------------------------------------------------
-// LEGACY band vocabulary (Excellent...Critical). No longer produced by new
-// reports, but kept so reports generated before this change keep rendering
-// with their original wording. Never delete this — it's load-bearing for
-// historical data.
+// LEGACY band vocabulary (Excellent...Critical). No longer produced, and no
+// longer displayed either: splitStatus() re-derives every report's tag from
+// its stored `days`, so a 13-day gap once filed as "Excellent" now reads
+// "Delayed". That is deliberate. These tags feed a permanent personnel record,
+// and leaving a wrong one standing against a teacher's name because it happens
+// to be old would preserve the very error this change exists to correct. The
+// underlying `days` is stored per notebook, so any figure stays auditable back
+// to the raw date.
+//
+// Kept for colour lookup and for any stored tag that still needs rendering.
+// Never delete this — it is load-bearing for historical data.
 // ---------------------------------------------------------------------------
 export const BAND_ORDER = ["Excellent", "Satisfactory", "Needs Improvement", "Major Concern", "Critical"] as const;
 export type Band = (typeof BAND_ORDER)[number];
@@ -104,9 +111,11 @@ export const BAND_META: Record<Band, { color: string; tone: string }> = {
 };
 
 // ---------------------------------------------------------------------------
-// NVS v1.0 — Notebook Verification Status Matrix (current system).
-// Day-based status, split by class band, with four override tags that take
-// priority over the day count whenever they apply. Locked per product spec.
+// NVS v2.0 — Notebook Verification Status Matrix.
+// Day-based status, split by class band. v1.0 carried four override tags that
+// took priority over the day count; two of them described the child's work, so
+// they have been demoted to flags shown beside the tag. The rule now lives in
+// engine.statusTag() and attribution.splitStatus(); the thresholds live here.
 // ---------------------------------------------------------------------------
 export type ClassBand = "primary" | "middle_senior";
 
@@ -203,8 +212,13 @@ export function bandColor(b: string): string {
   return tagColor(b);
 }
 
-// Reads a student's tag regardless of report vintage: new reports store
+// Reads the STORED tag regardless of report vintage: new reports store
 // `statusTag`, old reports store `band`. Falls back to a safe default.
+//
+// Anything shown to a person should use splitStatus() in attribution.ts
+// instead — a stored tag may be a pupil-side override that conceals the
+// teacher's actual checking standing. This remains only for callers that
+// genuinely need to know what was recorded at the time.
 export function studentTag(s: { statusTag?: string; band?: string }): string {
   return s.statusTag || s.band || "Up-to-date";
 }
