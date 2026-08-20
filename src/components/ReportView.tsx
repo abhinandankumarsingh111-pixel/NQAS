@@ -35,12 +35,16 @@ function wordHTML(r: ReportData, watermark: string) {
       `<div style="font-size:10px;color:${colour};margin-top:3px;">${esc(t)}</div>`;
     const status = esc(labelFor(sp.tag))
       + sp.teacherFlags.map((f) => flag(`${f} — teacher`, "#922B21")).join("")
+      + sp.disputedFlags.map((f) => flag(`${f} — date disagrees, not counted`, "#5b616e")).join("")
       + sp.pupilFlags.map((f) => flag(`${f} — pupil's own work`, "#7a5c00")).join("");
     return `<tr><td style="border:1px solid #ccc;padding:6px;">${esc(s.name || "—")}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${s.days == null ? "—" : s.days}</td><td style="border:1px solid #ccc;padding:6px;text-align:center;">${status}</td><td style="border:1px solid #ccc;padding:6px;">${esc(s.remark)}</td></tr>`;
   }).join("");
   const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupilFlags.length).length;
   const pupilNote = pupilFlagged
     ? `<p style="font-size:11px;color:#5b616e;margin:6px 0 0;font-style:italic;">The status shown is the teacher's checking standing, taken from days since last checked. ${pupilFlagged} notebook${pupilFlagged === 1 ? "" : "s"} also ${pupilFlagged === 1 ? "carries a flag" : "carry flags"} raised by the pupil's own work — recorded here, but never counted against the teacher.</p>` : "";
+  const disputedCount = r.students.filter((s) => splitStatus(s, r.academic.classBand).disputedFlags.length).length;
+  const disputedNote = disputedCount
+    ? `<p style="font-size:11px;color:#5b616e;margin:4px 0 0;font-style:italic;">On ${disputedCount} notebook${disputedCount === 1 ? "" : "s"} a checking observation is contradicted by the date recorded beside it. One of the two entries is wrong, so ${disputedCount === 1 ? "it is" : "they are"} shown but not counted &mdash; please confirm which is correct.</p>` : "";
   const classBandRow = r.academic.classBand
     ? `<tr><td><b>Class Band:</b> ${esc(CLASS_BAND_LABEL[r.academic.classBand])}</td><td></td><td></td></tr>` : "";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;color:#20242e;position:relative;">
@@ -56,7 +60,7 @@ function wordHTML(r: ReportData, watermark: string) {
     <h2 style="text-align:center;color:#0A3F6B;margin:16px 0 4px;">Notebook Verification Report</h2>
     <table style="width:100%;font-size:13px;margin:10px 0;"><tr><td><b>Teacher:</b> ${esc(r.academic.teacher)}</td><td><b>Class:</b> ${esc(r.academic.cls)}</td><td><b>Subject:</b> ${esc(r.academic.subject)}</td></tr>
     <tr><td><b>Date:</b> ${esc(r.meta.date)}</td><td><b>Coordinator:</b> ${esc(r.meta.coordinatorName)}</td><td><b>Samples:</b> ${r.students.length}</td></tr>${classBandRow}</table>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;"><thead><tr style="background:#0A3F6B;color:#fff;"><th style="border:1px solid #ccc;padding:6px;text-align:left;">Student</th><th style="border:1px solid #ccc;padding:6px;">Days Since Checked</th><th style="border:1px solid #ccc;padding:6px;">Status</th><th style="border:1px solid #ccc;padding:6px;text-align:left;">Observations</th></tr></thead><tbody>${rows}</tbody></table>${pupilNote}
+    <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:Arial,sans-serif;"><thead><tr style="background:#0A3F6B;color:#fff;"><th style="border:1px solid #ccc;padding:6px;text-align:left;">Student</th><th style="border:1px solid #ccc;padding:6px;">Days Since Checked</th><th style="border:1px solid #ccc;padding:6px;">Status</th><th style="border:1px solid #ccc;padding:6px;text-align:left;">Observations</th></tr></thead><tbody>${rows}</tbody></table>${pupilNote}${disputedNote}
     <h3 style="color:#026874;margin:16px 0 4px;">Final Observation</h3><p style="font-size:13px;line-height:1.6;">${esc(r.finalObservation)}</p>
     <h3 style="color:#026874;margin:16px 0 4px;">Recommended Corrective Actions</h3><ul style="font-size:13px;">${r.recs.map((x) => `<li>${esc(x)}</li>`).join("") || "<li>No corrective action is required at this stage.</li>"}</ul>
     <h3 style="color:#026874;margin:16px 0 4px;">Principal Summary</h3><p style="font-size:13px;line-height:1.6;">${esc(r.principalSummary)}</p>
@@ -70,6 +74,7 @@ export default function ReportView({ r }: { r: ReportData }) {
   const [copied, setCopied] = useState(false);
   const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupilFlags.length).length;
   const undated = r.students.filter((s) => splitStatus(s, r.academic.classBand).unknown).length;
+  const disputed = r.students.filter((s) => splitStatus(s, r.academic.classBand).disputedFlags.length).length;
 
   const downloadWord = async () => {
     const logoRes = await fetch("/logo-symbol.png");
@@ -137,6 +142,7 @@ export default function ReportView({ r }: { r: ReportData }) {
                       <td style={{ textAlign: "center" }}>
                         <span className="band" style={{ background: tagColor(sp.tag) }}>{labelFor(sp.tag)}</span>
                         {sp.teacherFlags.map((f) => <div key={f} className="teacher-flag">{f} · teacher</div>)}
+                        {sp.disputedFlags.map((f) => <div key={f} className="disputed-flag">{f} · date disagrees</div>)}
                         {sp.pupilFlags.map((f) => <div key={f} className="pupil-flag">{f} · pupil</div>)}
                       </td>
                       <td>{s.remark}</td>
@@ -144,7 +150,7 @@ export default function ReportView({ r }: { r: ReportData }) {
                 })}</tbody>
               </table>
             </div>
-            {(pupilFlagged > 0 || undated > 0) && (
+            {(pupilFlagged > 0 || undated > 0 || disputed > 0) && (
               <div className="pupil-note">
                 {pupilFlagged > 0 && (
                   <>The status shown is the teacher&rsquo;s checking standing, taken from days since last checked.
@@ -155,6 +161,12 @@ export default function ReportView({ r }: { r: ReportData }) {
                   <>{pupilFlagged > 0 ? " " : ""}{undated} notebook{undated === 1 ? " has" : "s have"} no recorded checking
                   date, so {undated === 1 ? "its" : "their"} timeliness is unknown and {undated === 1 ? "it is" : "they are"} excluded
                   from the teacher&rsquo;s figures rather than counted against her.</>
+                )}
+                {disputed > 0 && (
+                  <>{(pupilFlagged > 0 || undated > 0) ? " " : ""}On {disputed} notebook{disputed === 1 ? "" : "s"} a checking
+                  observation is contradicted by the date recorded beside it. One of the two entries is
+                  wrong, so {disputed === 1 ? "it is" : "they are"} shown but not counted &mdash; please
+                  confirm which is correct.</>
                 )}
               </div>
             )}
