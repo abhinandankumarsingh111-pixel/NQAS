@@ -1,4 +1,4 @@
-import { dayStatus, worseTag, type ClassBand, type DayStatus } from "./observations";
+import { dayStatus, isBehind, worseTag, type ClassBand, type DayStatus } from "./observations";
 
 // ---------------------------------------------------------------------------
 // ATTRIBUTION POLICY — what a teacher may be held to.
@@ -109,13 +109,73 @@ export function isStudentSideTag(tag: string): boolean {
   return STUDENT_ATTRIBUTABLE_TAGS.has(tag);
 }
 
+// ===========================================================================
+// WHEN A TICK AND THE DATE DISAGREE
+//
+// Three teacher-side ticks assert that TIME HAS PASSED. Each is a claim the
+// recorded date can flatly contradict, and both contradictions exist in live
+// data: "Prolonged gap" on a notebook checked the SAME DAY, and "Not checked
+// this cycle" on one checked two days earlier.
+//
+// One of the two entries is a mistake, and there is no way to tell which from
+// here. Counting it would put a lapse on a permanent record on the strength of
+// a tick the coordinator's own date refutes. Dropping it silently would destroy
+// an observation someone made in the room.
+//
+// So a contradicted tick is DISPUTED: shown on the report, excluded from her
+// figures, left for a person to resolve. Ambiguity resolves in her favour, as
+// everywhere else in this file.
+//
+// CQ.irregular and CQ.superficial are absent deliberately — neither is
+// contradicted by a recent date. A notebook can honestly be checked yesterday
+// and checked badly.
+// ===========================================================================
+export const DATE_CONTRADICTABLE: ReadonlySet<string> = new Set([
+  "CI.long_gap",          // "prolonged gap" — but it was checked on Tuesday
+  "CQ.not_this_cycle",    // "not this cycle" — but the last check was 2 days ago
+  "CI.no_teacher_check",  // "never checked"  — but a checking date was entered
+]);
+
+/** Label for CI.no_teacher_check when it is disputed and so cannot set the tag. */
+const NO_CHECK_LABEL = "No teacher checking recorded";
+
+/** True when the recorded date refutes a tick asserting that time has passed. */
+function dateRefutes(days: number | null | undefined, classBand?: ClassBand | null): boolean {
+  if (!classBand || days == null) return false;  // no date, nothing to refute with
+  return !isBehind(days, classBand);
+}
+
+/**
+ * The teacher-attributable ticks that survive the recorded date — the ones she
+ * may fairly be held to. Use this, not teacherFaults(), wherever a figure is
+ * computed. teacherFaults() answers "what is hers in principle"; this answers
+ * "what is hers on this notebook, given what the date says".
+ */
+export function countableFaults(
+  obsIds: string[], days: number | null, classBand?: ClassBand | null,
+): string[] {
+  const faults = (obsIds || []).filter(isTeacherFault);
+  if (!dateRefutes(days, classBand)) return faults;
+  return faults.filter((o) => !DATE_CONTRADICTABLE.has(o));
+}
+
+/** The teacher-attributable ticks this notebook's date refutes. */
+export function disputedFaults(
+  obsIds: string[], days: number | null, classBand?: ClassBand | null,
+): string[] {
+  if (!dateRefutes(days, classBand)) return [];
+  return (obsIds || []).filter((o) => isTeacherFault(o) && DATE_CONTRADICTABLE.has(o));
+}
+
 export interface SplitStatus {
   /** The tag: her checking standing, and nothing else. */
   tag: string;
-  /** Her own checking faults. Counted toward her record. */
+  /** Her own checking faults, minus any the date refutes. Counted. */
   teacherFlags: string[];
   /** The child's shortcomings. Shown, never counted. */
   pupilFlags: string[];
+  /** Her ticks that the recorded date contradicts. Shown, never counted. */
+  disputedFlags: string[];
   /** True when no last-checked date was recorded, so timeliness is unknown. */
   unknown: boolean;
 }
@@ -134,7 +194,15 @@ export function splitStatus(
   classBand?: ClassBand | null,
 ): SplitStatus {
   const obs = s.obs || [];
-  const teacherFlags = obs.filter((o) => o in TEACHER_FLAG_LABEL).map((o) => TEACHER_FLAG_LABEL[o]);
+  const refuted = dateRefutes(s.days, classBand);
+  const label = (o: string) => (o === "CI.no_teacher_check" ? NO_CHECK_LABEL : TEACHER_FLAG_LABEL[o]);
+
+  const teacherFlags = obs
+    .filter((o) => o in TEACHER_FLAG_LABEL && !(refuted && DATE_CONTRADICTABLE.has(o)))
+    .map((o) => TEACHER_FLAG_LABEL[o]);
+  const disputedFlags = refuted
+    ? obs.filter((o) => isTeacherFault(o) && DATE_CONTRADICTABLE.has(o)).map(label)
+    : [];
   const pupilFlags = obs.filter((o) => o in PUPIL_FLAG_LABEL).map((o) => PUPIL_FLAG_LABEL[o]);
 
   // No band: thresholds unknown. Fall back to what was recorded, and recover
@@ -142,20 +210,25 @@ export function splitStatus(
   const stored = s.statusTag || s.band || "Up-to-date";
   if (!classBand) {
     const legacy = isStudentSideTag(stored) ? [stored] : [];
-    return { tag: stored, teacherFlags, pupilFlags: [...new Set([...pupilFlags, ...legacy])], unknown: false };
+    return {
+      tag: stored, teacherFlags, disputedFlags,
+      pupilFlags: [...new Set([...pupilFlags, ...legacy])], unknown: false,
+    };
   }
 
   // No evidence of any checking is the one genuine teacher failure severe
-  // enough to override the day count.
-  if (obs.includes("CI.no_teacher_check")) {
-    return { tag: "Critical", teacherFlags, pupilFlags, unknown: false };
+  // enough to override the day count — unless the coordinator also entered a
+  // recent checking date, in which case the tick is disputed and cannot brand
+  // her Critical on evidence her own report contradicts.
+  if (obs.includes("CI.no_teacher_check") && !refuted) {
+    return { tag: "Critical", teacherFlags, pupilFlags, disputedFlags, unknown: false };
   }
   // A missing date is an absence of evidence, not a failure. It must not be
   // scored against her, so it is named plainly and excluded from her figures.
   if (s.days == null) {
-    return { tag: "Not recorded", teacherFlags, pupilFlags, unknown: true };
+    return { tag: "Not recorded", teacherFlags, pupilFlags, disputedFlags, unknown: true };
   }
-  return { tag: dayStatus(s.days, classBand), teacherFlags, pupilFlags, unknown: false };
+  return { tag: dayStatus(s.days, classBand), teacherFlags, pupilFlags, disputedFlags, unknown: false };
 }
 
 /** Worst teacher-side tag across a set of notebooks. */

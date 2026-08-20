@@ -137,3 +137,11 @@ textarea.input { resize: vertical; line-height: 1.55; font-family: var(--font-bo
   margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: .3px;
   color: var(--red); white-space: nowrap;
 }
+
+/* A teacher-side tick the recorded date refutes. Deliberately the quietest of
+   the three: it is not a finding against anyone, it is two entries that
+   disagree and need a person to settle them. */
+.disputed-flag {
+  margin-top: 4px; font-size: 10px; font-weight: 600; letter-spacing: .3px;
+  color: var(--sub); font-style: italic; white-space: nowrap;
+}

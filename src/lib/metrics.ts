@@ -14,11 +14,15 @@
 //  4. A missing checking date is UNKNOWN, never a failure. dayStatus() returns
 //     "Overdue" for null, so counting it would score a blank field against her
 //     as if she had never checked the book. Undated notebooks are excluded.
+//  5. A tick the recorded date REFUTES is not counted. "Prolonged gap" on a
+//     notebook checked the same day is one of two entries being wrong, and
+//     there is no way to tell which — so it is reported as disputed rather
+//     than charged to her. Both contradictions exist in live data.
 //
 // Pure and deterministic. No React, no I/O.
 
 import { dayStatus, type ClassBand, type DayStatus } from "./observations";
-import { isTeacherFault } from "./attribution";
+import { countableFaults, disputedFaults } from "./attribution";
 
 export const DAY_STATUS_ORDER: DayStatus[] = ["Up-to-date", "Due Soon", "Delayed", "Overdue"];
 
@@ -62,6 +66,8 @@ export interface TeacherMetrics {
   unscored: number;
   /** Notebooks with no last-checked date. Excluded from timeliness entirely. */
   undated: number;
+  /** Ticks the recorded date refutes. Reported, never charged to her — rule 5. */
+  disputed: number;
   provisional: boolean;
   samplingMethods: string[];
 }
@@ -89,7 +95,7 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
   const daysByBand: Partial<Record<ClassBand, number[]>> = {};
   const coordinators = new Set<string>();
   const sampling = new Set<string>();
-  let notebooks = 0, faulty = 0, critical = 0, unscored = 0, scored = 0, undated = 0;
+  let notebooks = 0, faulty = 0, critical = 0, unscored = 0, scored = 0, undated = 0, disputed = 0;
   let from: string | null = null, to: string | null = null;
 
   for (const r of reports) {
@@ -113,13 +119,15 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
         (daysByBand[r.class_band] ||= []).push(s.days);
       }
 
-      // Rule 1: only the teacher's own faults.
+      // Rules 1 and 5: only the teacher's own faults, and only those her own
+      // recorded date does not refute.
       const obs = s.obs;
       if (!obs || obs.length === 0) { unscored++; continue; }
       scored++;
-      const faults = obs.filter(isTeacherFault);
+      const faults = countableFaults(obs, s.days, r.class_band);
+      disputed += disputedFaults(obs, s.days, r.class_band).length;
       if (faults.length) faulty++;
-      if (obs.includes("CI.no_teacher_check") || obs.includes("CI.long_gap")) critical++;
+      if (faults.includes("CI.no_teacher_check") || faults.includes("CI.long_gap")) critical++;
     }
   }
 
@@ -147,6 +155,7 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
     coordinators: coordinators.size,
     unscored,
     undated,
+    disputed,
     provisional: reports.length < PROVISIONAL_BELOW,
     samplingMethods: [...sampling],
   };
