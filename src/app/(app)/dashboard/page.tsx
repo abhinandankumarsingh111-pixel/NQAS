@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
-import { ALL_STATUS_ORDER, studentTag, tagColor, type ClassBand } from "@/lib/observations";
-import { worstTeacherTag } from "@/lib/attribution";
+import { ALL_STATUS_ORDER, tagColor, type ClassBand } from "@/lib/observations";
+import { splitStatus, worstTeacherTag } from "@/lib/attribution";
 import ReportListItem, { type ReportRow } from "@/components/ReportListItem";
 import CampusSelect from "@/components/CampusSelect";
 import MonthSelect, { type MonthOption } from "@/components/MonthSelect";
@@ -12,9 +12,10 @@ import MonthSelect, { type MonthOption } from "@/components/MonthSelect";
 // current NVS status tags.
 const SERIOUS_TAGS = new Set(["Critical", "Overdue", "Major Concern"]);
 
-// `days` is needed to recover the teacher's checking status where a pupil-side
-// override (Index Missing / Documentation Issue) replaced it.
-type StudentRow = { statusTag?: string; band?: string; days?: number | null };
+// `days` recovers the teacher's checking status; `obs` separates her own
+// checking faults from the pupil's, so neither the badge nor the counts below
+// can be set by something the child did.
+type StudentRow = { statusTag?: string; band?: string; days?: number | null; obs?: string[] | null };
 type Report = {
   id: string; campus_id: string | null; subject: string; class: string; teacher: string;
   date: string; coordinator_name: string; sample_size: number;
@@ -60,30 +61,35 @@ function resolveMonth(requested: string | undefined, months: MonthOption[]): str
 
 function computeStats(reps: Report[], camps: { id: string; name: string }[]) {
   const totalStudents = reps.reduce((n, r) => n + (r.students?.length || 0), 0);
-  const serious = reps.reduce((n, r) =>
-    n + (r.students || []).filter((s) => SERIOUS_TAGS.has(studentTag(s))).length, 0);
   const reportingCampuses = new Set(reps.map((r) => r.campus_id)).size;
   const perCampus = camps.map((c) => ({ name: c.name, count: reps.filter((r) => r.campus_id === c.id).length }));
   const maxCampus = Math.max(1, ...perCampus.map((c) => c.count));
 
-  // Tally whatever tag vocabulary actually appears in the data — old reports
-  // and new reports can coexist and both display correctly.
+  // One pass, teacher-side throughout.
   //
-  // These org-wide tallies deliberately keep the STORED tag. "Documentation
-  // Issue" here means a notebook genuinely has one, which is true and worth
-  // knowing; unlike the per-report badge, this count is never shown against an
-  // individual teacher's name.
+  // These counts were previously tallied from the STORED tag, on the reasoning
+  // that an org-wide census of notebook condition is worth having and is never
+  // shown against an individual name. But "Serious concerns" is read as a
+  // judgement of checking, and the stored tag broke it in both directions: a
+  // child's untidy notebook counted as a serious concern, while a genuine
+  // 24-day lag hid behind "Index Missing" and counted as nothing.
+  //
+  // So the distribution reports her checking, and the census that reasoning was
+  // protecting is kept as `pupilFlagged` and stated plainly beneath it.
+  let serious = 0, pupilFlagged = 0;
   const tally: Record<string, number> = {};
   reps.forEach((r) => (r.students || []).forEach((s) => {
-    const t = studentTag(s);
-    tally[t] = (tally[t] || 0) + 1;
+    const sp = splitStatus(s, r.class_band);
+    if (SERIOUS_TAGS.has(sp.tag)) serious++;
+    if (sp.pupilFlags.length) pupilFlagged++;
+    tally[sp.tag] = (tally[sp.tag] || 0) + 1;
   }));
   const tagCount = Object.entries(tally)
     .sort((a, b) => ALL_STATUS_ORDER.indexOf(a[0]) - ALL_STATUS_ORDER.indexOf(b[0]))
     .map(([tag, count]) => ({ tag, color: tagColor(tag), count }));
   const maxTag = Math.max(1, ...tagCount.map((t) => t.count));
 
-  return { totalStudents, serious, reportingCampuses, perCampus, maxCampus, tagCount, maxTag };
+  return { totalStudents, serious, pupilFlagged, reportingCampuses, perCampus, maxCampus, tagCount, maxTag };
 }
 
 // The badge shown beside a teacher's name in the report list. Teacher-side
@@ -147,6 +153,13 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
                 <span style={{ fontSize: 12, width: 20, textAlign: "right", color: "var(--sub)" }}>{t.count}</span>
               </div>
             ))}
+            {stats.pupilFlagged > 0 && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.5 }}>
+                Status is the teacher&rsquo;s checking standing, taken from days since last checked.
+                {" "}{stats.pupilFlagged} notebook{stats.pupilFlagged === 1 ? "" : "s"} also {stats.pupilFlagged === 1 ? "carries a flag" : "carry flags"} raised
+                by the pupil&rsquo;s own work, recorded on the report but not counted here.
+              </div>
+            )}
           </div>
         </div>
         <div className="card">
@@ -228,6 +241,13 @@ export default async function Dashboard({ searchParams }: { searchParams: { camp
                 <span style={{ fontSize: 12, width: 20, textAlign: "right", color: "var(--sub)" }}>{t.count}</span>
               </div>
             ))}
+            {stats.pupilFlagged > 0 && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 7, lineHeight: 1.5 }}>
+                Status is the teacher&rsquo;s checking standing, taken from days since last checked.
+                {" "}{stats.pupilFlagged} notebook{stats.pupilFlagged === 1 ? "" : "s"} also {stats.pupilFlagged === 1 ? "carries a flag" : "carry flags"} raised
+                by the pupil&rsquo;s own work, recorded on the report but not counted here.
+              </div>
+            )}
           </div>
         </div>
       </div>
