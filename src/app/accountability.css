@@ -129,3 +129,11 @@ textarea.input { resize: vertical; line-height: 1.55; font-family: var(--font-bo
   margin-top: 8px; font-size: 11.5px; line-height: 1.5; color: var(--sub);
   font-style: italic; border-left: 2px solid var(--gold-soft); padding-left: 9px;
 }
+
+/* Teacher-side checking faults sit beside the tag and DO count toward her
+   record; pupil-side flags are recorded but never counted. Distinct colours so
+   the two are never mistaken for each other. */
+.teacher-flag {
+  margin-top: 4px; font-size: 10px; font-weight: 700; letter-spacing: .3px;
+  color: var(--red); white-space: nowrap;
+}

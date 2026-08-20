@@ -3,7 +3,7 @@
 
 import {
   OBS_BY_ID, RECOMMENDATIONS, CATEGORIES,
-  type ClassBand, type StatusTag, dayStatus, STATUS_META, worseTag,
+  type ClassBand, type StatusTag, dayStatus, isBehind, STATUS_META, worseTag,
 } from "./observations";
 
 export interface StudentInput {
@@ -43,34 +43,36 @@ export function daysSince(last: string, ref: string): number | null {
 }
 
 // ---------------------------------------------------------------------------
-// NVS v1.0 status cascade. Priority order (highest to lowest):
-//   1. Critical  — any critical-impact observation selected, OR no last-
-//      checked date at all (i.e. not checked this session).
-//   2. Superficial — checking exists but is cursory.
-//   3. Documentation Issue — any negative Documentation-category observation.
-//   4. Index Missing — any negative Index-category observation.
-//   5. Otherwise, the day-based status for the selected class band.
-// A later check never overrides an earlier one — this function returns as
-// soon as it finds a match, so the priority is structural, not just a label.
+// NVS v2.0 status rule. A tag reports the TEACHER'S CHECKING and nothing else.
+//
+//   1. Critical      — no evidence of teacher checking at all. The one genuine
+//                      failure severe enough to override the day count.
+//   2. Not recorded  — no last-checked date. Unknown, not a failure; excluded
+//                      from her figures rather than scored against her.
+//   3. Otherwise     — the day-based status for the class band.
+//
+// v1.0 let any critical-impact observation and any negative Documentation or
+// Index observation override the day count. Two of those describe the CHILD's
+// work, which broke the tag in both directions: a notebook checked yesterday
+// with an untidy book read "Critical", while a genuine 24-day lag hid behind
+// "Index Missing". Child-side observations are now flags beside the tag —
+// recorded in full, never able to set it. See attribution.ts.
 // ---------------------------------------------------------------------------
 export function statusTag(ids: string[], days: number | null, classBand: ClassBand): StatusTag {
-  const sel = ids.map((i) => OBS_BY_ID[i]).filter(Boolean);
-
-  const hasCritical = sel.some((o) => o.impact === "critical") || days == null;
-  if (hasCritical) return "Critical";
-
-  if (ids.includes("CQ.superficial")) return "Superficial";
-
-  const hasDocIssue = sel.some((o) => o.cat === "DOC" && o.pol === "negative");
-  if (hasDocIssue) return "Documentation Issue";
-
-  const hasIndexMissing = sel.some((o) => o.cat === "IDX" && o.pol === "negative");
-  if (hasIndexMissing) return "Index Missing";
-
+  if (ids.includes("CI.no_teacher_check")) return "Critical";
+  if (days == null) return "Not recorded";
   return dayStatus(days, classBand);
 }
 
-export function checkConsistency(ids: string[]): string[] {
+/**
+ * Contradictions worth catching before a report is filed.
+ *
+ * `days` and `classBand` are optional so existing callers keep working; pass
+ * them to also catch ticks that contradict the recorded date. Both cases below
+ * exist in live data — "prolonged gap" was ticked on notebooks checked the
+ * same day — and each one distorts a teacher's permanent record.
+ */
+export function checkConsistency(ids: string[], days?: number | null, classBand?: ClassBand): string[] {
   const set = new Set(ids), out: string[] = [], seen = new Set<string>();
   ids.forEach((id) => (OBS_BY_ID[id]?.excludes || []).forEach((ex) => {
     if (set.has(ex)) {
@@ -78,6 +80,19 @@ export function checkConsistency(ids: string[]): string[] {
       if (!seen.has(k)) { seen.add(k); out.push(`"${OBS_BY_ID[id].label}" conflicts with "${OBS_BY_ID[ex].label}" — please review.`); }
     }
   }));
+
+  if (days != null && classBand) {
+    const recent = !isBehind(days, classBand);
+    if (recent && set.has("CI.long_gap")) {
+      out.push(`"Prolonged gap" is ticked, but this notebook was checked ${days} day${days === 1 ? "" : "s"} ago — please review.`);
+    }
+    if (recent && set.has("CI.no_teacher_check")) {
+      out.push(`"No teacher checking at all" is ticked, but a checking date ${days} day${days === 1 ? "" : "s"} ago was entered — please review.`);
+    }
+    if (recent && set.has("CQ.not_this_cycle")) {
+      out.push(`"Not checked this cycle" is ticked, but the last check was ${days} day${days === 1 ? "" : "s"} ago — please review.`);
+    }
+  }
   return out;
 }
 
@@ -119,11 +134,20 @@ function topCats(results: StudentResult[], inputs: StudentInput[]): string[] {
 }
 
 const GOOD_TAGS = new Set<StatusTag>(["Up-to-date", "Due Soon"]);
+// A missing checking date is unknown, not a lapse. It must not be counted as a
+// concern in the narrative, or a notebook whose date was simply left blank
+// would read as a failure of the teacher.
+const UNKNOWN_TAGS = new Set<StatusTag>(["Not recorded"]);
 
 function finalTrack1(results: StudentResult[], inputs: StudentInput[], academic: Academic): string {
   const n = results.length;
+  const unknown = results.filter((s) => UNKNOWN_TAGS.has(s.statusTag)).length;
   const good = results.filter((s) => GOOD_TAGS.has(s.statusTag)).length;
-  const concern = n - good;
+  const concern = n - good - unknown;
+  const assessed = n - unknown;
+  const unknownNote = unknown
+    ? ` ${unknown} notebook${unknown === 1 ? " has no recorded checking date and is" : "s have no recorded checking date and are"} excluded from this count.`
+    : "";
   const anyCritical = results.some((s) => s.statusTag === "Critical");
   const cats = topCats(results, inputs);
   // A notebook can land in "concern" purely on elapsed days (Delayed/Overdue) with an
@@ -137,13 +161,15 @@ function finalTrack1(results: StudentResult[], inputs: StudentInput[], academic:
     : concern > 1
       ? "The concerns centre chiefly on checking having fallen behind schedule and should be addressed in the coming cycle."
       : "The concern centres chiefly on checking having fallen behind schedule and should be addressed in the coming cycle.";
-  return `Across the ${n} notebook${n > 1 ? "s" : ""} sampled for ${academic.teacher || "the teacher"}'s ${academic.subject || "subject"} (${academic.cls || "class"}), ${good} of ${n} ${good === 1 ? "is" : "are"} up to date or due soon, while ${concern} require${concern === 1 ? "s" : ""} attention. ${tail}`;
+  return `Across the ${n} notebook${n > 1 ? "s" : ""} sampled for ${academic.teacher || "the teacher"}'s ${academic.subject || "subject"} (${academic.cls || "class"}), ${good} of ${assessed} ${good === 1 ? "is" : "are"} up to date or due soon, while ${concern} require${concern === 1 ? "s" : ""} attention.${unknownNote} ${tail}`;
 }
 
 function summaryTrack1(results: StudentResult[], academic: Academic, meta: ReportMeta, recs: string[]): string {
   const n = results.length;
+  const unknown = results.filter((s) => UNKNOWN_TAGS.has(s.statusTag)).length;
   const good = results.filter((s) => GOOD_TAGS.has(s.statusTag)).length;
-  const concern = n - good;
+  const concern = n - good - unknown;
+  const assessed = n - unknown;
   const worst = results.reduce<string>((w, s) => worseTag(w, s.statusTag), "Up-to-date");
   const worstTone = (STATUS_META as Record<string, { tone: string }>)[worst]?.tone || "in need of review";
   const action = recs.length ? recs[0] : "No corrective action is required at this stage.";
@@ -154,11 +180,11 @@ function summaryTrack1(results: StudentResult[], academic: Academic, meta: Repor
   // single-notebook case); otherwise state the proportion explicitly.
   const overall = !concern
     ? "Overall the notebooks are up to date."
-    : concern === n
+    : concern === assessed
       ? `Overall the notebooks are ${worstTone}.`
       : concern === 1
-        ? `Overall, ${good} of ${n} ${good === 1 ? "is" : "are"} up to date, though 1 is ${worstTone}.`
-        : `Overall, ${good} of ${n} ${good === 1 ? "is" : "are"} up to date, though ${concern} require attention (most seriously, ${worstTone}).`;
+        ? `Overall, ${good} of ${assessed} ${good === 1 ? "is" : "are"} up to date, though 1 is ${worstTone}.`
+        : `Overall, ${good} of ${assessed} ${good === 1 ? "is" : "are"} up to date, though ${concern} require attention (most seriously, ${worstTone}).`;
   return `Notebook verification of ${academic.subject || "subject"} (${academic.cls || "class"}) under ${academic.teacher || "the teacher"} was carried out on ${meta.date} across ${n} sample${n > 1 ? "s" : ""}. ${overall} ${action}`;
 }
 
@@ -185,7 +211,7 @@ export function buildDeterministic(meta: ReportMeta, academic: Academic, student
   // exists — leaving the principal's summary to say "No corrective action is required"
   // right next to a Delayed/Overdue status. Fall back to the standard checking-schedule
   // recommendation whenever any student has a non-good status but no rec was derived.
-  if (!recs.length && results.some((s) => !GOOD_TAGS.has(s.statusTag))) {
+  if (!recs.length && results.some((s) => !GOOD_TAGS.has(s.statusTag) && !UNKNOWN_TAGS.has(s.statusTag))) {
     recs = [RECOMMENDATIONS.regular_checking.text];
   }
   return {
