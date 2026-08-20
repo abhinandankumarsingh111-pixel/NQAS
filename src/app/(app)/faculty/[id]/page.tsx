@@ -173,6 +173,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
               teaching are compared fairly. Only copy correction counts here — student handwriting, index and
               presentation appear on the reports below but are never counted against a teacher.
               {m.unscored > 0 && <> {m.unscored} notebook{m.unscored === 1 ? "" : "s"} predate observation capture and are excluded from the flag rate.</>}
+              {m.undated > 0 && <> {m.undated} notebook{m.undated === 1 ? " has" : "s have"} no recorded checking date, so {m.undated === 1 ? "it is" : "they are"} excluded from these figures rather than counted against her.</>}
               {m.samplingMethods.length > 0 && <> Sampling: {m.samplingMethods.map((s) => SAMPLING_LABEL[s] || s).join(", ")}.</>}
             </div>
           </>

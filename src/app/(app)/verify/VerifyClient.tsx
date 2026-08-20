@@ -8,6 +8,15 @@ import TeacherPicker, { type Fac } from "@/components/TeacherPicker";
 import ReportView, { type ReportData } from "@/components/ReportView";
 
 const STEPS = ["Details", "Students & Observations", "Preview", "Report"];
+
+// Five randomly picked notebooks is the standard sample.
+//
+// Not only to save the coordinator time: with sample sizes ranging from 1 to 26
+// across live reports, the "% behind" figure was not comparable between
+// teachers at all. One was judged on 26 notebooks and another on a single one,
+// and at n=5 the percentage moves in 20-point steps while at n=26 it moves in
+// 4-point steps. A fixed sample makes the comparison valid.
+const SAMPLE_TARGET = 5;
 const emptyStudent = (): StudentInput & { customDraft: string } => ({ name: "", lastChecked: "", selected: [], customs: [], customDraft: "" });
 
 function StatusChip({ tag }: { tag: string }) {
@@ -42,7 +51,9 @@ export default function VerifyClient({
   const [report, setReport] = useState<ReportData | null>(null);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const warnings = useMemo(() => students.flatMap((s) => checkConsistency(s.selected)), [students]);
+  const warnings = useMemo(
+    () => students.flatMap((s) => checkConsistency(s.selected, daysSince(s.lastChecked, date), classBand)),
+    [students, date, classBand]);
   const setStudent = (i: number, patch: Partial<typeof students[number]>) =>
     setStudents((a) => a.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   const toggle = (i: number, id: string) =>
@@ -171,7 +182,17 @@ export default function VerifyClient({
               </div>
             </div>
           ))}
-          <button className="btn btn-ghost" onClick={() => setStudents((a) => [...a, emptyStudent()])}>+ Add another student</button>
+          {students.length < SAMPLE_TARGET ? (
+            <button className="btn btn-ghost" onClick={() => setStudents((a) => [...a, emptyStudent()])}>
+              + Add another student ({students.length} of {SAMPLE_TARGET})
+            </button>
+          ) : (
+            <div className="notice" style={{ marginBottom: 0 }}>
+              <b>Five notebooks is a full sample.</b> Picked at random, five is enough to judge a
+              teacher&rsquo;s checking — and keeping every report to the same size is what makes one
+              teacher&rsquo;s figures comparable with another&rsquo;s. Continue to the preview.
+            </div>
+          )}
         </div>
       )}
 
