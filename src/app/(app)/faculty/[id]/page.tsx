@@ -7,6 +7,8 @@ import RemarkComposer from "@/components/RemarkComposer";
 import AcknowledgeButton from "@/components/AcknowledgeButton";
 import PrintButton from "@/components/PrintButton";
 import FacultyAdmin from "@/components/FacultyAdmin";
+import { GRADE_COLOR } from "@/lib/observation-scoring";
+import { FOLLOW_UP_LABEL } from "@/lib/observation-rubrics";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,17 @@ export default async function TeacherRecord({ params }: { params: { id: string }
       supabase.from("faculty_postings").select("*, campuses(name)").eq("faculty_id", params.id).order("from_date"),
       supabase.from("faculty_previous_names").select("*").eq("faculty_id", params.id).order("changed_on"),
     ]);
+
+  // Class observations for this teacher. RLS decides what comes back: the
+  // campus principal and the owner see them, management and coordinators get
+  // nothing at all. Demo observations are a different table entirely and can
+  // never surface here — a candidate's rejected demo must not attach itself to
+  // a serving teacher who happens to share their name.
+  const { data: observations } = await supabase.from("observations")
+    .select("id, observed_on, class_name, section, subject, earned, max_marks, pct, grade, follow_up")
+    .eq("faculty_id", params.id).eq("status", "submitted")
+    .order("observed_on", { ascending: false });
+  const obsRows = observations || [];
 
   // Owner-only management data. Merge candidates are every OTHER faculty record
   // the owner can see, so a duplicate created at the wrong campus can still be
@@ -184,6 +197,49 @@ export default async function TeacherRecord({ params }: { params: { id: string }
           </>
         )}
       </div>
+
+      {/* ---------------- class observation history (spec 25) ---------------- */}
+      {obsRows.length > 0 && (
+        <div className="card">
+          <div className="card-h"><h2>Class Observation</h2></div>
+          <div className="scroll-x">
+            <table className="rt">
+              <thead><tr>
+                <th style={{ textAlign: "left" }}>Date</th>
+                <th style={{ textAlign: "left" }}>Class</th>
+                <th style={{ textAlign: "left" }}>Subject</th>
+                <th>Score</th>
+                <th>Grade</th>
+                <th style={{ textAlign: "left" }}>Follow-up</th>
+              </tr></thead>
+              <tbody>
+                {obsRows.map((o, i) => (
+                  <tr key={o.id} style={{ background: i % 2 ? "#fafaf7" : "#fff" }}>
+                    <td><Link href={`/observe/report/in_campus/${o.id}`}>{o.observed_on}</Link></td>
+                    <td>{[o.class_name, o.section].filter(Boolean).join("-") || "—"}</td>
+                    <td>{o.subject || "—"}</td>
+                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>{o.earned}/{o.max_marks}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <span className="band" style={{ background: GRADE_COLOR[o.grade || "C"] }}>{o.grade}</span>
+                    </td>
+                    <td style={{ fontSize: 12.5 }}>
+                      {o.follow_up && o.follow_up !== "none"
+                        ? FOLLOW_UP_LABEL[o.follow_up]
+                        : <span className="muted">&mdash;</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="muted" style={{ fontSize: 11.5, marginTop: 10, lineHeight: 1.6 }}>
+            Lesson observations conducted by the principal. Scored against the same
+            rubric at every campus, so one teacher&rsquo;s figures can be read
+            against another&rsquo;s. Separate from notebook verification above, which
+            measures copy correction only.
+          </div>
+        </div>
+      )}
 
       {isOwner && (
         <div style={{ marginBottom: 14 }}>
