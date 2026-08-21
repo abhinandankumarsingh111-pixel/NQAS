@@ -3,10 +3,14 @@ import Link from "next/link";
 import { getProfile, createClient } from "@/lib/supabase/server";
 import PrintButton from "@/components/PrintButton";
 import AmendForm from "@/components/AmendForm";
+import ObservationControls from "@/components/ObservationControls";
 import {
   RUBRICS, FOLLOW_UP_LABEL, RECOMMENDATION_LABEL, rubricTotal, type RubricId,
 } from "@/lib/observation-rubrics";
-import { scoreRows, GRADE_COLOR, type Answers } from "@/lib/observation-scoring";
+import {
+  scoreRows, GRADE_COLOR, developmentPlan, strengthsList,
+  concernCriteria, criterionName, type Answers,
+} from "@/lib/observation-scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +19,9 @@ const KINDS: RubricId[] = ["in_campus", "demo"];
 export default async function ObservationReport({ params }: { params: { kind: string; id: string } }) {
   const { profile } = await getProfile();
   if (!profile) redirect("/login");
-  if (profile.role !== "principal" && profile.role !== "owner") redirect("/dashboard");
+  // Management can reach a report only where the principal shared it — RLS
+  // returns nothing otherwise, and the notFound() below catches that.
+  if (!["principal", "owner", "management"].includes(profile.role)) redirect("/dashboard");
 
   const kind = params.kind as RubricId;
   if (!KINDS.includes(kind)) notFound();
@@ -33,7 +39,31 @@ export default async function ObservationReport({ params }: { params: { kind: st
       .eq("observation_id", params.id).order("changed_at", { ascending: false }),
   ]);
 
-  const rows = scoreRows(rubric, (o.answers || {}) as Answers);
+  // Earlier observations of the SAME teacher, for two things a principal cannot
+  // hold in their head: whether a concern is being raised again, and whether
+  // the teacher is moving.
+  const { data: history } = kind === "in_campus" && o.faculty_id
+    ? await supabase.from("observations")
+        .select("id, observed_on, pct, grade, answers")
+        .eq("faculty_id", o.faculty_id).eq("status", "submitted")
+        .lt("observed_on", o.observed_on)
+        .order("observed_on", { ascending: false }).limit(5)
+    : { data: null };
+  const past = history || [];
+
+  const answers = (o.answers || {}) as Answers;
+  const rows = scoreRows(rubric, answers);
+  const plan = developmentPlan(rubric, answers);
+  const keep = strengthsList(rubric, answers);
+
+  // A weakness flagged three times running is a different conversation from one
+  // flagged once, and the system should be the thing that remembers.
+  const nowConcerns = new Set(concernCriteria(rubric, answers));
+  const repeats = past.length
+    ? [...nowConcerns].filter((cid) =>
+        concernCriteria(rubric, (past[0].answers || {}) as Answers).includes(cid))
+    : [];
+
   const isDemo = kind === "demo";
   const who = isDemo ? o.candidate_name : o.teacher_name;
   const grade = o.grade || "C";
@@ -147,8 +177,63 @@ export default async function ObservationReport({ params }: { params: { kind: st
             </table>
           </div>
 
-          {o.strengths && <><h3>Strengths</h3><p style={{ margin: "0 0 13px" }}>{o.strengths}</p></>}
-          {o.improvements && <><h3>Areas for Improvement</h3><p style={{ margin: "0 0 13px" }}>{o.improvements}</p></>}
+          {past.length > 0 && (
+            <>
+              <h3>Trend</h3>
+              <div className="obs-trend">
+                {[...past].reverse().map((h) => (
+                  <span key={h.id} className="obs-trend-pill">
+                    {String(h.observed_on).slice(5)} &middot; {h.pct}% {h.grade}
+                  </span>
+                ))}
+                <span className="obs-trend-pill now">
+                  {String(o.observed_on).slice(5)} &middot; {o.pct}% {grade}
+                </span>
+              </div>
+            </>
+          )}
+
+          {repeats.length > 0 && (
+            <div className="obs-repeat">
+              <b>Raised again.</b> {repeats.map((c) => criterionName(rubric, c)).join(", ")}
+              {repeats.length === 1 ? " was" : " were"} also flagged at the previous
+              observation on {String(past[0].observed_on)}. Where a concern persists
+              across observations, support is more use than another note.
+            </div>
+          )}
+
+          {keep.length > 0 && (
+            <>
+              <h3>Strengths &mdash; keep doing</h3>
+              <ul style={{ margin: "0 0 13px", paddingLeft: 20 }}>
+                {keep.map((k) => <li key={k} style={{ marginBottom: 3 }}>{k}</li>)}
+              </ul>
+            </>
+          )}
+
+          {plan.length > 0 && (
+            <>
+              <h3>Development plan</h3>
+              <p className="muted" style={{ fontSize: 12, margin: "0 0 9px" }}>
+                Most important first, by the marks each cost.
+              </p>
+              <ol style={{ margin: "0 0 13px", paddingLeft: 20 }}>
+                {plan.map((a) => (
+                  <li key={a.action} style={{ marginBottom: 8 }}>
+                    {a.action.charAt(0).toUpperCase() + a.action.slice(1)}.
+                    <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                      {a.criterion} &middot; {a.lost} of {a.max} marks &middot; {a.observed.join(", ").toLowerCase()}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+
+          {o.improvements && !plan.length && (
+            <><h3>Areas for Improvement</h3><p style={{ margin: "0 0 13px" }}>{o.improvements}</p></>
+          )}
+
           {o.final_remark && (
             <><h3>{isDemo ? "Principal's Remarks" : "Principal's Final Remarks"}</h3>
             <p style={{ margin: "0 0 13px", whiteSpace: "pre-wrap" }}>{o.final_remark}</p></>
@@ -165,6 +250,12 @@ export default async function ObservationReport({ params }: { params: { kind: st
             {o.status === "submitted"
               ? `Submitted ${new Date(o.submitted_at).toLocaleString("en-GB")} by ${o.observer_name} — locked record.`
               : "Draft — not yet part of the record."}
+            {o.status === "submitted" && (
+              <span className={`obs-shared-chip ${o.visible_to_management ? "obs-shared-yes" : "obs-shared-no"}`}
+                style={{ marginLeft: 8 }}>
+                {o.visible_to_management ? "Shared with management" : "Private to the principal"}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -192,6 +283,15 @@ export default async function ObservationReport({ params }: { params: { kind: st
             </div>
           ))}
         </div>
+      )}
+
+      {o.status === "submitted" && (
+        <ObservationControls
+          kind={kind} id={o.id} who={who}
+          isPrincipal={profile.role === "principal"}
+          isOwner={profile.role === "owner"}
+          shared={o.visible_to_management === true}
+        />
       )}
 
       {canAmend && (
