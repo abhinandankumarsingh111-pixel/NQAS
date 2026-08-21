@@ -5,7 +5,8 @@ import {
   RUBRICS, FOLLOW_UP, RECOMMENDATION, type RubricId,
 } from "@/lib/observation-rubrics";
 import {
-  type Answers, answerFor, totalsFor, summarise, scoreRows, GRADE_COLOR,
+  type Answers, answerFor, totalsFor, scoreRows, GRADE_COLOR,
+  developmentPlan, strengthsList,
 } from "@/lib/observation-scoring";
 import { saveProgressAction, submitObservationAction } from "@/actions/observations";
 
@@ -35,6 +36,8 @@ export default function ObservationRunner({
   const [remarkOpen, setRemarkOpen] = useState(false);
   const [finalRemark, setFinalRemark] = useState("");
   const [outcome, setOutcome] = useState(kind === "in_campus" ? "none" : "consider");
+  // Private by default. Sharing upward is a decision, not a default.
+  const [share, setShare] = useState(false);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -52,16 +55,20 @@ export default function ObservationRunner({
         if (typeof d.step === "number") setStep(Math.min(d.step, lastStep));
         if (typeof d.finalRemark === "string") setFinalRemark(d.finalRemark);
         if (typeof d.outcome === "string") setOutcome(d.outcome);
+        if (typeof d.share === "boolean") setShare(d.share);
       }
     } catch { /* private mode, cleared storage — the server draft still stands */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shareRef = useRef(false);
+  shareRef.current = share;
   const persist = useCallback((next: Answers, nextStep: number, remark: string, out: string) => {
     try {
       localStorage.setItem(storeKey, JSON.stringify({
         answers: next, step: nextStep, finalRemark: remark, outcome: out,
+        share: shareRef.current,
       }));
     } catch { /* not fatal — the server copy below is the real one */ }
 
@@ -77,7 +84,8 @@ export default function ObservationRunner({
   const current = criterion ? answers[criterion.id] : undefined;
   const totals = useMemo(() => totalsFor(rubric, answers), [rubric, answers]);
   const rows = useMemo(() => scoreRows(rubric, answers), [rubric, answers]);
-  const summary = useMemo(() => summarise(rubric, answers), [rubric, answers]);
+  const plan = useMemo(() => developmentPlan(rubric, answers), [rubric, answers]);
+  const keep = useMemo(() => strengthsList(rubric, answers), [rubric, answers]);
 
   function tap(optionId: string) {
     if (!criterion) return;
@@ -120,6 +128,7 @@ export default function ObservationRunner({
     const res = await submitObservationAction(kind, id, {
       answers,
       finalRemark,
+      visibleToManagement: share,
       ...(kind === "in_campus" ? { followUp: outcome } : { recommendation: outcome }),
     });
     setBusy(false);
@@ -254,11 +263,30 @@ export default function ObservationRunner({
             </div>
           )}
 
-          {(summary.strengths || summary.improvements) && (
+          {keep.length > 0 && (
             <div className="obs-summary">
-              {summary.strengths && <p><b>Strengths.</b> {summary.strengths}</p>}
-              {summary.improvements && <p><b>To work on.</b> {summary.improvements}</p>}
-              <span>Written for you from your selections. You can edit it after submitting.</span>
+              <p><b>Keep doing.</b> {keep.join(" · ")}</p>
+            </div>
+          )}
+
+          {/* Ranked by marks lost, not by criterion order. A teacher who reads
+              four suggestions acts on the first, so the first must be the one
+              that matters most. */}
+          {plan.length > 0 && (
+            <div className="obs-plan">
+              <div className="obs-plan-h">Development plan &mdash; most important first</div>
+              {plan.map((a, i) => (
+                <div key={a.action} className="obs-plan-row">
+                  <span className="obs-plan-n">{i + 1}</span>
+                  <span>
+                    <b>{a.action.charAt(0).toUpperCase() + a.action.slice(1)}.</b>
+                    <em>{a.criterion} &middot; {a.lost} of {a.max} marks &middot; {a.observed.join(", ").toLowerCase()}</em>
+                  </span>
+                </div>
+              ))}
+              <span className="obs-plan-note">
+                Written from your selections. You can edit the wording after submitting.
+              </span>
             </div>
           )}
 
@@ -280,6 +308,18 @@ export default function ObservationRunner({
           <textarea className="obs-remark" rows={3} value={finalRemark}
             placeholder="Anything you want on the record"
             onChange={(e) => { setFinalRemark(e.target.value); persist(answers, step, e.target.value, outcome); }} />
+
+          <label className="obs-label">Who can see this</label>
+          <button type="button" className={`obs-share ${share ? "on" : ""}`}
+            onClick={() => { const v = !share; setShare(v); persist(answers, step, finalRemark, outcome); }}>
+            <span className="obs-switch" aria-hidden="true"><i /></span>
+            <span>
+              <b>{share ? "Visible to management" : "Private to you"}</b>
+              {share
+                ? "Management can read this report. The teacher's record shows it either way."
+                : "Only you and the owner can read it. You can share it later."}
+            </span>
+          </button>
 
           {err && <div className="obs-err">{err}</div>}
 
