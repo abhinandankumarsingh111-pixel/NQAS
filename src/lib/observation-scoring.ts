@@ -22,6 +22,19 @@ export interface CriterionAnswer {
   score: number;
   /** What the engine suggested. Never overwritten, so an edit stays visible. */
   auto: number;
+  /**
+   * The marks this criterion was worth WHEN IT WAS SCORED.
+   *
+   * Rubric weights are editable data, so they will be retuned. Without this,
+   * every record already filed would silently re-read itself against the new
+   * weights — a 12/15 scored last term would render as 12/10 once the criterion
+   * dropped to 10, or worse be clamped to 10/10 and quietly lose the mark. A
+   * personnel record has to keep meaning what it meant on the day.
+   *
+   * Optional only because records written before this field exists have none;
+   * those fall back to the current rubric, and the report says so.
+   */
+  max?: number;
   /** Optional. Never required to move on. */
   remark?: string;
 }
@@ -80,7 +93,7 @@ export function answerFor(
   const auto = suggestedScore(c, selected);
   // Re-tapping options resets the score to the new suggestion. Keeping a stale
   // hand-edited score against changed evidence would silently misreport.
-  return { selected, auto, score: auto, remark: previous?.remark };
+  return { selected, auto, score: auto, max: c.max, remark: previous?.remark };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +119,7 @@ export function totalsFor(r: Rubric, answers: Answers): Totals {
   for (const c of r.criteria) {
     const a = answers[c.id];
     if (!a || a.selected.length === 0) { unanswered.push(c.id); continue; }
-    earned += clamp(a.score, c.max);
+    earned += clamp(a.score, a.max ?? c.max);
     if (a.score !== a.auto) edited.push(c.id);
   }
 
@@ -209,11 +222,14 @@ function dedupe(xs: string[]): string[] {
 export function scoreRows(r: Rubric, answers: Answers) {
   return r.criteria.map((c) => {
     const a = answers[c.id];
+    // The criterion's worth AS SCORED, so an old report keeps reading correctly
+    // after the rubric is retuned.
+    const max = a?.max ?? c.max;
     return {
       id: c.id,
       name: c.name,
-      max: c.max,
-      score: a ? clamp(a.score, c.max) : null,
+      max,
+      score: a ? clamp(a.score, max) : null,
       auto: a?.auto ?? null,
       edited: !!a && a.score !== a.auto,
       answered: !!a && a.selected.length > 0,
