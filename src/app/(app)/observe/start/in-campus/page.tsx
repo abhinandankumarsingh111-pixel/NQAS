@@ -16,6 +16,10 @@ export const dynamic = "force-dynamic";
  * So the principal picks the teacher — a real, campus-scoped list — and the
  * class, section and subject are pre-filled from what that teacher was last
  * verified teaching, editable in one tap. Same three taps, no invented data.
+ *
+ * The list is a starting point, not a limit: the picker can create a teacher
+ * who has never had a notebook verification filed. Restricting observation to
+ * teachers a coordinator happened to check first would be exactly backwards.
  */
 export default async function InCampusStartPage() {
   const { profile } = await getProfile();
@@ -46,10 +50,10 @@ export default async function InCampusStartPage() {
   const teachers: TeacherOption[] = (faculty || []).map((f) => ({
     id: f.id,
     name: f.name,
-    subject: (f.subjects && f.subjects.length ? f.subjects[0] : f.subject) || "",
+    subject: (f.subjects && f.subjects.length ? f.subjects[0] : f.subject) || null,
     lastClass: lastSeen.get(f.id)?.cls || "",
     lastSubject: lastSeen.get(f.id)?.subject || "",
   }));
 
-  return <InCampusStart teachers={teachers} />;
+  return <InCampusStart teachers={teachers} campusId={profile.campus_id!} />;
 }
