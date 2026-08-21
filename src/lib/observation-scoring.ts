@@ -191,10 +191,10 @@ export function summarise(r: Rubric, answers: Answers): Summary {
   // Strengths report what was SEEN. Improvements report what to DO — a teacher
   // reading "the lesson was largely lecture-based" under "areas for
   // improvement" learns nothing they did not already know, so each concern
-  // contributes its remedy instead. `fix` is optional; a concern without one
+  // contributes its remedy instead. `action` is optional; a concern without one
   // falls back to the observation rather than vanishing from the report.
   const pos = dedupe(picked.filter((p) => p.o.tone === "positive").map((p) => p.o.phrase));
-  const neg = dedupe(picked.filter((p) => p.o.tone === "negative").map((p) => p.o.fix || p.o.phrase));
+  const neg = dedupe(picked.filter((p) => p.o.tone === "negative").map((p) => p.o.action || p.o.phrase));
 
   return {
     strengths: pos.length ? sentence(joinClauses(pos.slice(0, MAX_CLAUSES))) : "",
@@ -239,4 +239,96 @@ export function scoreRows(r: Rubric, answers: Answers) {
       remark: a?.remark?.trim() || "",
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// THE DEVELOPMENT PLAN
+//
+// The difference between a report a teacher acts on and one they file away.
+//
+// Ordering is by MARKS LOST, not by the order the criteria happen to appear in.
+// A teacher who reads four suggestions will act on the first one, so the first
+// one has to be the one that matters most. Ordering by criterion number would
+// put "Preparation" above "Subject Knowledge" purely because it is asked first.
+//
+// Capped, deliberately. Handing someone eleven things to fix is the same as
+// handing them none; three or four is a term's work.
+// ---------------------------------------------------------------------------
+export interface PlanAction {
+  criterionId: string;
+  /** Which criterion this came from, for the teacher to place it. */
+  criterion: string;
+  /** Marks lost there — the reason this is ranked where it is. */
+  lost: number;
+  max: number;
+  /** The concrete thing to do next lesson. */
+  action: string;
+  /** What was observed that prompted it, so the advice is not a mystery. */
+  observed: string[];
+}
+
+export function developmentPlan(r: Rubric, answers: Answers, limit = 4): PlanAction[] {
+  const found: PlanAction[] = [];
+
+  for (const c of r.criteria) {
+    const a = answers[c.id];
+    if (!a) continue;
+    const max = a.max ?? c.max;
+    const lost = Math.max(0, max - clamp(a.score, max));
+
+    for (const o of c.options) {
+      if (!a.selected.includes(o.id) || o.tone !== "negative" || !o.action) continue;
+      const already = found.find((f) => f.action === o.action);
+      // The same remedy can be prompted by two observations; say both rather
+      // than printing the same instruction twice.
+      if (already) { already.observed.push(o.label); continue; }
+      found.push({
+        criterionId: c.id, criterion: c.name, lost, max,
+        action: o.action, observed: [o.label],
+      });
+    }
+  }
+
+  return found.sort((x, y) => y.lost - x.lost || y.max - x.max).slice(0, limit);
+}
+
+/**
+ * What the teacher should KEEP doing.
+ *
+ * A report that lists only faults gets read once and resented. Naming what
+ * worked is not softening the message; it tells the teacher which of their
+ * habits to protect while they change the others.
+ */
+export function strengthsList(r: Rubric, answers: Answers, limit = 5): string[] {
+  const out: { label: string; weight: number }[] = [];
+  for (const c of r.criteria) {
+    const a = answers[c.id];
+    if (!a) continue;
+    for (const o of c.options) {
+      if (!a.selected.includes(o.id) || o.tone !== "positive") continue;
+      out.push({ label: o.label, weight: o.points });
+    }
+  }
+  return out.sort((x, y) => y.weight - x.weight).slice(0, limit).map((x) => x.label);
+}
+
+/**
+ * Criteria where anything negative was recorded.
+ *
+ * Used to spot a concern raised again at the next observation. A weakness
+ * flagged three times running is a different conversation from one flagged
+ * once, and the system should be the thing that remembers, not the principal.
+ */
+export function concernCriteria(r: Rubric, answers: Answers): string[] {
+  return r.criteria
+    .filter((c) => {
+      const a = answers[c.id];
+      return !!a && c.options.some((o) => a.selected.includes(o.id) && o.tone === "negative");
+    })
+    .map((c) => c.id);
+}
+
+/** Name a criterion from its id, for rendering a repeat-concern notice. */
+export function criterionName(r: Rubric, id: string): string {
+  return r.criteria.find((c) => c.id === id)?.name || id;
 }

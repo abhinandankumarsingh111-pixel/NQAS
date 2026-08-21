@@ -10,10 +10,11 @@ import {
 // ============================================================
 // CLASS OBSERVATION — server actions.
 //
-// PRINCIPAL ONLY. Management and coordinators are refused here and again by
-// RLS in the database, so neither layer is load-bearing on its own. The owner
-// may read observations but never conduct or alter one: an observation is a
-// professional judgement made in a room the owner was not standing in.
+// PRINCIPAL ONLY for anything that writes. Management and coordinators are
+// refused here and again by RLS in the database, so neither layer is
+// load-bearing on its own. The owner may read observations and delete one, but
+// never conduct or amend: an observation is a professional judgement made in a
+// room the owner was not standing in.
 // ============================================================
 
 type Kind = RubricId;
@@ -167,7 +168,10 @@ export async function saveProgressAction(
 // ---------------------------------------------------------------------------
 export async function submitObservationAction(
   kind: Kind, id: string,
-  extra: { answers: unknown; finalRemark?: string; followUp?: string; recommendation?: string },
+  extra: {
+    answers: unknown; finalRemark?: string; followUp?: string;
+    recommendation?: string; visibleToManagement?: boolean;
+  },
 ): Promise<{ ok: boolean; error?: string }> {
   const auth = await requirePrincipal();
   if ("error" in auth) return { ok: false, error: auth.error };
@@ -192,6 +196,11 @@ export async function submitObservationAction(
     final_remark: extra.finalRemark?.trim() || null,
     status: "submitted",
     submitted_at: new Date().toISOString(),
+    // Private to the principal unless they say otherwise. An observation is a
+    // candid judgement written in the moment; if every one were visible upward
+    // by default, principals would start writing for the audience rather than
+    // for the teacher, and the record would quietly become useless.
+    visible_to_management: extra.visibleToManagement === true,
   };
   if (kind === "in_campus") row.follow_up = extra.followUp || "none";
   else row.recommendation = extra.recommendation || "consider";
@@ -224,7 +233,14 @@ export async function discardDraftAction(kind: Kind, id: string): Promise<{ ok: 
 // row; this routes through amend_observation(), which records the before and
 // after in the same transaction. The original is never silently overwritten.
 // ---------------------------------------------------------------------------
-const AMENDABLE = new Set(["final_remark", "follow_up", "recommendation", "strengths", "improvements"]);
+const AMENDABLE = new Set([
+  "final_remark", "follow_up", "recommendation", "strengths", "improvements",
+  // Sharing is a property of the record rather than of its content, so it can
+  // be turned on or off afterwards — and every flip is logged like any other
+  // amendment, because who could see what, and from when, is exactly the kind
+  // of question that gets asked a year later.
+  "visible_to_management",
+]);
 
 export async function amendObservationAction(
   kind: Kind, id: string, field: string, value: string, reason: string,
@@ -241,5 +257,64 @@ export async function amendObservationAction(
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/observe/report/${kind}/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Share a submitted observation with management, or stop sharing it.
+ *
+ * Goes through the amendment door like everything else, so the log records who
+ * shared what and when. Management sees only what is shared AND submitted:
+ * a draft is work in progress, not a finding.
+ */
+export async function setVisibilityAction(
+  kind: Kind, id: string, visible: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requirePrincipal();
+  if ("error" in auth) return { ok: false, error: auth.error };
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc("amend_observation", {
+    p_id: id, p_kind: kind, p_field: "visible_to_management",
+    p_new_value: visible ? "true" : "false",
+    p_reason: visible ? "Shared with management" : "Sharing with management withdrawn",
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/observe/report/${kind}/${id}`);
+  revalidatePath("/observe");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// OWNER DELETE.
+//
+// A submitted observation is locked against the principal who wrote it, which
+// is right: nobody should be able to quietly remove a judgement they later
+// regret. But a mistaken or duplicate record has to be removable by someone,
+// and that is the owner.
+//
+// The database refuses a direct delete and yields only to delete_observation(),
+// which writes a summary of what it destroyed — teacher, date, score, reason —
+// before removing the row. That audit row outlives the record, so a deletion
+// can never be invisible.
+// ---------------------------------------------------------------------------
+export async function deleteObservationAction(
+  kind: Kind, id: string, reason: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { profile } = await getProfile();
+  if (!profile) return { ok: false, error: "Not authorised." };
+  if (profile.role !== "owner") {
+    return { ok: false, error: "Only the owner can delete an observation." };
+  }
+  if (!reason.trim()) {
+    return { ok: false, error: "Give a reason — it is kept after the record is gone." };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc("delete_observation", {
+    p_id: id, p_kind: kind, p_reason: reason.trim(),
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/observe");
   return { ok: true };
 }
