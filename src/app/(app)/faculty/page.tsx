@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getProfile, createClient } from "@/lib/supabase/server";
 import { teacherMetrics, PROVISIONAL_BELOW, type MetricReport } from "@/lib/metrics";
 import CampusSelect from "@/components/CampusSelect";
+import AddFacultyPanel from "@/components/AddFacultyPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -55,9 +56,13 @@ export default async function FacultyDirectory({
     remarkCount.set(rm.faculty_id, (remarkCount.get(rm.faculty_id) || 0) + 1);
   }
 
-  const rows = ((faculty || []) as FacultyRow[])
+  // Campus-scoped but NOT search-filtered: this is what the add-a-teacher
+  // picker checks against, and it must see everyone to spot a duplicate.
+  const campusFaculty = ((faculty || []) as FacultyRow[])
+    .filter((f) => !selectedCampusId || f.campus_id === selectedCampusId);
+
+  const rows = campusFaculty
     .filter((f) => (showInactive ? true : f.active))
-    .filter((f) => !selectedCampusId || f.campus_id === selectedCampusId)
     .filter((f) => !q
       || f.name.toLowerCase().includes(q.toLowerCase())
       || (f.subject || "").toLowerCase().includes(q.toLowerCase())
@@ -77,6 +82,13 @@ export default async function FacultyDirectory({
         {!isCampusLocked && <CampusSelect campuses={camps} value={selectedCampusId} basePath="/faculty" />}
       </div>
 
+      <AddFacultyPanel
+        faculty={campusFaculty.map((f) => ({ id: f.id, name: f.name, subject: f.subject }))}
+        campusId={isCampusLocked ? profile.campus_id : selectedCampusId}
+        campusName={campusName(isCampusLocked ? profile.campus_id : selectedCampusId)}
+        needsCampusChoice={!isCampusLocked && !selectedCampusId}
+      />
+
       <form method="GET" className="fac-search no-print">
         {selectedCampusId && <input type="hidden" name="campus" value={selectedCampusId} />}
         {showInactive && <input type="hidden" name="inactive" value="1" />}
@@ -89,8 +101,9 @@ export default async function FacultyDirectory({
         <div className="empty">
           <b>No faculty recorded yet{selectedCampusId ? ` at ${campusName(selectedCampusId)}` : ""}.</b>
           <div className="muted" style={{ marginTop: 6 }}>
-            Teachers are added automatically the first time a coordinator files a verification for them.
-            Nothing is missing — there simply has not been a verification here yet.
+            Teachers appear here the first time a coordinator files a verification for
+            them, or a principal observes their class. You can also add one directly
+            using the button above.
           </div>
         </div>
       ) : (
