@@ -256,6 +256,69 @@
 }
 .obs-hscore { flex: 0 0 auto; font-size: 13px; color: var(--sub); font-weight: 600; }
 
+/* ---- development plan: the part the teacher actually acts on ---- */
+.obs-plan {
+  margin-top: 14px; padding: 13px 15px; border-radius: 9px;
+  background: #fff; border: 1.5px solid var(--teal);
+}
+.obs-plan-h {
+  font-size: 11.5px; font-weight: 700; letter-spacing: .4px;
+  text-transform: uppercase; color: var(--teal); margin-bottom: 10px;
+}
+.obs-plan-row { display: flex; gap: 11px; align-items: flex-start; margin-bottom: 11px; }
+.obs-plan-n {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--navy); color: #fff; display: grid; place-items: center;
+  font-size: 12.5px; font-weight: 700;
+}
+.obs-plan-row b { display: block; font-size: 14.5px; color: var(--ink); line-height: 1.45; font-weight: 600; }
+.obs-plan-row em {
+  display: block; font-style: normal; font-size: 11.5px;
+  color: var(--sub); margin-top: 2px;
+}
+.obs-plan-note { font-size: 11px; color: var(--sub); font-style: italic; }
+
+/* ---- sharing toggle ---- */
+.obs-share {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%;
+  min-height: 60px; padding: 13px 14px; text-align: left; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  font-family: var(--font-body);
+}
+.obs-share.on { border-color: var(--teal); background: var(--chip); }
+.obs-share b { display: block; font-size: 15px; color: var(--navy); margin-bottom: 2px; }
+.obs-share span:last-child { font-size: 12px; color: var(--sub); line-height: 1.5; }
+.obs-switch {
+  flex: 0 0 auto; width: 44px; height: 26px; border-radius: 13px;
+  background: var(--line); position: relative; transition: background .15s; margin-top: 2px;
+}
+.obs-switch i {
+  position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+  border-radius: 50%; background: #fff; transition: transform .15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.obs-share.on .obs-switch { background: var(--teal); }
+.obs-share.on .obs-switch i { transform: translateX(18px); }
+
+/* ---- report extras ---- */
+.obs-shared-chip {
+  display: inline-block; padding: 3px 9px; border-radius: 5px;
+  font-size: 11px; font-weight: 700; letter-spacing: .3px;
+}
+.obs-shared-yes { background: var(--chip); color: var(--teal); }
+.obs-shared-no { background: var(--paper); color: var(--sub); border: 1px solid var(--line); }
+.obs-repeat {
+  margin-top: 12px; padding: 11px 13px; border-radius: 8px;
+  background: #FDECEC; border: 1px solid var(--red);
+  font-size: 13px; color: #8a1f1f; line-height: 1.55;
+}
+.obs-trend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.obs-trend-pill {
+  padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  background: var(--paper); border: 1px solid var(--line); color: var(--sub);
+}
+.obs-trend-pill.now { background: var(--navy); color: #fff; border-color: var(--navy); }
+
 @media (min-width: 700px) {
   .obs-nav { position: static; background: none; border-top: none; padding: 14px 0 0; backdrop-filter: none; }
   .obs { padding-bottom: 20px; }
