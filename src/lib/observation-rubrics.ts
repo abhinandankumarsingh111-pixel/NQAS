@@ -5,10 +5,16 @@
 // EXISTING teacher during a real lesson; Demo judges a CANDIDATE's potential.
 // Different purposes, different criteria, different records, different reports.
 //
-// Everything a principal taps is defined here. The rule for every label is the
-// spec's golden rule: if you have to read a paragraph to know what to pick, the
-// criterion is too complicated. Labels are 1-4 words. The interpretation lives
-// in `phrase`, which is used only to compose the written report afterwards.
+// WHAT MAKES AN OPTION GOOD.
+// Every option must name something you can SEE from the back of the room, at
+// the moment it happens. "Good questioning" fails that test: two principals
+// will read it differently, and a teacher told they scored low on it learns
+// nothing. "Answers own questions" and "Wait time after asking" pass it — they
+// are observable, they are unambiguous, and each one implies its own remedy.
+//
+// That is why every concern carries an `action`: a specific thing the teacher
+// can do in their next lesson. An observation that ends in "improve
+// questioning" has wasted the principal's period.
 //
 // TOTALS ARE COMPUTED FROM THIS FILE, never hardcoded, and both rubrics come to
 // exactly 100. Change any `max` and the totals, the review screen and the report
@@ -23,16 +29,14 @@
  *  scale     — one tap from five levels, best to worst. Used where the judgement
  *              is a single dimension (how engaged were they?).
  *  checklist — tick every piece of evidence seen. Used where several independent
- *              things can each be true (clear board work AND SmartBoard used).
- *
- * Both exist because the spec asks for both: a five-level Engagement question
- * and a tick-what-you-saw Classroom Management question.
+ *              things can each be true (wait time AND cold-calling AND building
+ *              on answers are three separate observations).
  */
 export type CriterionMode = "scale" | "checklist";
 
 export interface RubricOption {
   id: string;
-  /** What the principal taps. Short. Never a sentence. */
+  /** What the principal taps. Short, and observable. Never a sentence. */
   label: string;
   /**
    * scale: the score this level awards outright.
@@ -47,11 +51,14 @@ export interface RubricOption {
    */
   phrase: string;
   /**
-   * For concerns only: what to DO about it, as a clause. "Areas for
-   * improvement" that merely restate the fault are useless to the teacher
-   * reading them, so a concern carries its own remedy.
+   * For concerns only: ONE CONCRETE THING TO DO NEXT LESSON.
+   *
+   * Imperative, specific, and small enough to actually happen. "Improve
+   * questioning" is not an action; "count five seconds silently after asking
+   * before taking any answer" is. This is what appears in the teacher's
+   * development plan, ranked by how many marks the criterion lost.
    */
-  fix?: string;
+  action?: string;
 }
 
 export interface Criterion {
@@ -92,25 +99,25 @@ const SCALE_FRACTIONS = [1, 0.8, 0.6, 0.4, 0.2];
  */
 function scale(
   max: number,
-  levels: [string, string, string?][],   // [label, phrase, fix]
+  levels: [string, string, string?][],   // [label, phrase, action]
 ): RubricOption[] {
-  return levels.map(([label, phrase, fix], i) => ({
+  return levels.map(([label, phrase, action], i) => ({
     id: `l${i + 1}`,
     label,
     points: Math.round(max * SCALE_FRACTIONS[i]),
     tone: i <= 1 ? ("positive" as const) : ("negative" as const),
     phrase,
-    ...(fix ? { fix } : {}),
+    ...(action ? { action } : {}),
   }));
 }
 
-/** Checklist option shorthand. Negative points = concern, which must carry a fix. */
-function ev(id: string, label: string, points: number, phrase: string, fix?: string): RubricOption {
-  return { id, label, points, tone: points >= 0 ? "positive" : "negative", phrase, ...(fix ? { fix } : {}) };
+/** Checklist option shorthand. Negative points = concern, which must carry an action. */
+function ev(id: string, label: string, points: number, phrase: string, action?: string): RubricOption {
+  return { id, label, points, tone: points >= 0 ? "positive" : "negative", phrase, ...(action ? { action } : {}) };
 }
 
 // ===========================================================================
-// A. IN-CAMPUS CLASS OBSERVATION — 100 marks
+// A. IN-CAMPUS CLASS OBSERVATION — 100 marks, 11 criteria
 // ===========================================================================
 export const IN_CAMPUS: Rubric = {
   id: "in_campus",
@@ -118,56 +125,77 @@ export const IN_CAMPUS: Rubric = {
   blurb: "Observing a teacher already on this campus, during a regular lesson.",
   criteria: [
     {
-      // 5 rather than 10: preparation is the thing a visitor can least directly
-      // observe. You infer it from how the lesson unfolds, which the other
-      // criteria already measure head-on.
+      // 5 marks: preparation is the thing a visitor can least directly observe.
+      // You infer it from how the lesson unfolds, which the criteria below
+      // measure head-on.
       id: "prep",
-      name: "Preparation",
-      prompt: "How prepared was the lesson?",
+      name: "Preparation & Objective",
+      prompt: "How did the lesson open?",
       max: 5,
       mode: "checklist",
       options: [
-        ev("well_prepared", "Well prepared", 1, "the lesson was well prepared"),
-        ev("objective_clear", "Objective clear", 1, "the lesson objective was clear"),
-        ev("resources_ready", "Resources ready", 1, "resources were ready at hand"),
-        ev("structured", "Lesson structured", 1, "the lesson followed a clear structure"),
-        ev("needs_improvement", "Preparation weak", -3, "lesson preparation needs strengthening",
-           "planning the lesson and its resources before the period"),
+        ev("objective_shared", "Objective shared with class", 1, "the lesson objective was shared with the class"),
+        ev("materials_ready", "Materials ready before bell", 1, "materials were ready before the bell"),
+        ev("prior_learning", "Prior learning connected", 1, "the lesson was connected to prior learning"),
+        ev("plan_evident", "Working to a plan", 1, "the lesson was clearly working to a plan"),
+        ev("objective_unclear", "Objective never clear", -3, "the class was not told what they were learning",
+           "write the objective on the board before the bell and return to it at the close"),
+        ev("setup_time_lost", "Time lost setting up", -2, "teaching time was lost to setting up",
+           "have the board and materials ready before students enter"),
       ],
     },
     {
       id: "subject",
       name: "Subject Knowledge",
-      prompt: "What did you see of their command of the subject?",
+      prompt: "What did their command of the subject look like?",
       max: 15,
       mode: "checklist",
       options: [
-        ev("excellent_command", "Excellent command", 2, "an excellent command of the subject was evident"),
-        ev("concepts_clear", "Concepts clear", 2, "concepts were put across clearly"),
-        ev("accurate", "Accurate explanation", 1, "explanations were accurate"),
-        ev("examples", "Good examples", 1, "well-chosen examples were used"),
-        ev("handles_questions", "Handles questions well", 1, "student questions were handled confidently"),
-        ev("gaps", "Conceptual gaps", -8, "conceptual gaps were observed",
-           "revisiting the underlying concepts before teaching this topic again"),
+        ev("accurate", "Accurate throughout", 2, "the content was accurate throughout"),
+        ev("beyond_text", "Goes beyond the textbook", 2, "the teaching went beyond the textbook"),
+        ev("anticipates", "Anticipates common errors", 1, "common student errors were anticipated"),
+        ev("handles_unexpected", "Handles unexpected questions", 1, "unexpected questions were handled confidently"),
+        ev("terminology", "Correct terminology", 1, "subject terminology was used correctly"),
+        ev("factual_error", "Factual error observed", -8, "a factual error was taught",
+           "check this chapter's content with the HOD before teaching it again"),
+        ev("deflected", "Question deflected", -4, "a student question was deflected rather than answered",
+           "when you do not know, say when you will come back to it — and come back to it"),
       ],
     },
     {
-      // 10 rather than 15: "Good questioning" is one of its options, and
-      // questioning has its own 10-mark criterion below. At 15 the same
-      // evidence was being paid for twice.
       id: "method",
       name: "Teaching Methodology",
       prompt: "How was the lesson taught?",
       max: 10,
       mode: "checklist",
       options: [
-        ev("student_centred", "Student-centred", 2, "the approach was student-centred"),
-        ev("questioning", "Good questioning", 1, "questioning was used well"),
-        ev("real_life", "Real-life links", 1, "the topic was linked to real life"),
-        ev("thinking", "Encourages thinking", 1, "students were pushed to think"),
-        ev("appropriate", "Appropriate method", 1, "the method suited the topic"),
-        ev("lecture_only", "Mostly lecture", -5, "the lesson was largely lecture-based",
-           "building in more student-led activity"),
+        ev("students_working", "Students working, not just listening", 2, "students were working rather than only listening"),
+        ev("real_life", "Linked to real life", 1, "the topic was linked to something students recognise"),
+        ev("activity_fit", "Activity fitted the objective", 1, "the activity fitted the objective"),
+        ev("modelled", "Modelled before setting work", 1, "the task was modelled before students attempted it"),
+        ev("lecture_only", "Teacher talked throughout", -5, "the teacher talked for most of the period",
+           "give students something to do in the first ten minutes, not the last ten"),
+        ev("task_unclear", "Task instructions unclear", -4, "students were unclear what they had been asked to do",
+           "give the instruction, then ask one student to repeat it back before starting"),
+      ],
+    },
+    {
+      // 5 marks: a focused check on delivery, separate from method. A lesson
+      // can be well designed and still inaudible at the back.
+      id: "explanation",
+      name: "Explanation & Delivery",
+      prompt: "Could every student follow it?",
+      max: 5,
+      mode: "checklist",
+      options: [
+        ev("audible", "Audible throughout the room", 1, "the teacher was audible throughout the room"),
+        ev("pace", "Pace suited the class", 1, "the pace suited the class"),
+        ev("pitched", "Language pitched right", 1, "language was pitched correctly for the age group"),
+        ev("examples", "Examples students recognise", 1, "examples were ones the students recognised"),
+        ev("too_fast", "Too fast to follow", -3, "the lesson moved faster than the class could follow",
+           "pause after each key step and check two or three students before moving on"),
+        ev("read_aloud", "Read from the textbook", -3, "the lesson was largely read aloud from the textbook",
+           "teach from notes and keep the textbook for practice, not for delivery"),
       ],
     },
     {
@@ -179,24 +207,32 @@ export const IN_CAMPUS: Rubric = {
       options: scale(15, [
         ["Highly engaged", "students were highly engaged"],
         ["Mostly engaged", "students were mostly engaged"],
-        ["Moderate", "student engagement was moderate", "drawing more of the class into the lesson"],
-        ["Low", "student engagement was low", "drawing more of the class into the lesson"],
-        ["Very low", "students were largely disengaged", "re-engaging the class with participatory activity"],
+        ["Moderate", "student engagement was moderate",
+         "open with a question or a problem rather than an explanation"],
+        ["Low", "student engagement was low",
+         "break the period into shorter segments with something for students to do in each"],
+        ["Very low", "students were largely disengaged",
+         "rebuild the lesson around a task students do, and ask the HOD to observe the next one"],
       ]),
     },
     {
-      id: "hots",
-      name: "Questioning & HOTS",
-      prompt: "What kind of questions were asked?",
+      id: "questioning",
+      name: "Questioning & Thinking",
+      prompt: "What kind of questions were asked, and of whom?",
       max: 10,
       mode: "checklist",
       options: [
-        ev("probing", "Probing questions", 2, "probing questions were asked"),
-        ev("hots", "HOTS used", 1, "higher-order thinking questions were used"),
-        ev("competency", "Competency questions", 1, "competency-based questions were posed"),
-        ev("follow_up", "Follow-up questions", 1, "follow-up questions extended student answers"),
-        ev("recall_only", "Mostly recall", -5, "questioning stayed mostly at recall level",
-           "asking more open and higher-order questions"),
+        ev("wait_time", "Wait time after asking", 1, "wait time was given after each question"),
+        ev("across_room", "Calls on students across the room", 1, "questions were spread across the room"),
+        ev("builds_on", "Builds on student answers", 1, "student answers were built on rather than just accepted"),
+        ev("why_how", "Asks why / how do you know", 1, "students were asked to justify their answers"),
+        ev("application", "Application questions", 1, "questions asked students to apply, not just recall"),
+        ev("volunteers_only", "Only volunteers answer", -4, "only volunteers were answering",
+           "call by roll number so every student expects to be asked"),
+        ev("answers_own", "Answers own questions", -4, "the teacher answered their own questions",
+           "count five seconds silently after asking before taking any answer"),
+        ev("recall_only", "Recall questions only", -5, "questioning stayed at recall level",
+           "plan three 'why' or 'how do you know' questions into every lesson"),
       ],
     },
     {
@@ -206,74 +242,82 @@ export const IN_CAMPUS: Rubric = {
       max: 10,
       mode: "checklist",
       options: [
-        ev("excellent_control", "Excellent control", 2, "the class was very well managed"),
-        ev("orderly", "Orderly class", 1, "the class remained orderly"),
-        ev("transitions", "Smooth transitions", 1, "transitions were smooth"),
-        ev("time", "Good time management", 1, "time was managed well"),
-        ev("minor_disruption", "Minor disruption", -2, "there was minor disruption",
-           "tightening routines at transitions"),
-        ev("frequent_disruption", "Frequent disruption", -5, "disruption was frequent",
-           "establishing firmer classroom routines"),
+        ev("settled_fast", "Settled within a minute", 1, "the class settled within a minute of the bell"),
+        ev("first_time", "Instructions followed first time", 2, "instructions were followed first time"),
+        ev("moves_around", "Moves around the room", 1, "the teacher moved around the room"),
+        ev("full_period", "Full period used", 1, "the full period was used"),
+        ev("repeated_calls", "Repeated calls for attention", -3, "attention had to be called for repeatedly",
+           "agree one silent attention signal with the class and use only that"),
+        ev("ended_early", "Lesson ended early", -3, "the lesson finished before the period did",
+           "keep a short extension task ready for the last five minutes"),
+        ev("disruption_unaddressed", "Disruption left unaddressed", -5, "off-task behaviour went unaddressed",
+           "deal with off-task behaviour quietly and immediately, before it spreads"),
       ],
     },
     {
       id: "differentiation",
-      name: "Differentiation",
+      name: "Differentiation & Inclusion",
       prompt: "Were different learners catered for?",
       max: 10,
       mode: "checklist",
       options: [
-        ev("weaker", "Supports weaker learners", 2, "weaker learners were supported"),
-        ev("advanced", "Challenges advanced", 1, "advanced learners were challenged"),
-        ev("inclusive", "Inclusive participation", 1, "participation was inclusive"),
-        ev("individual", "Checks individuals", 1, "individual understanding was checked"),
-        ev("same_for_all", "Same approach for all", -5, "the same approach was used for every learner",
-           "greater differentiation for learners at different levels"),
+        ev("weaker_individually", "Checks weaker learners individually", 2, "weaker learners were checked on individually"),
+        ev("extension", "Extension for early finishers", 1, "early finishers had something further to do"),
+        ev("spread", "Participation spread widely", 1, "participation was spread across the class"),
+        ev("back_rows", "Back rows reached", 1, "the back of the room was reached as much as the front"),
+        ev("same_for_all", "Same task, same pace for all", -4, "every learner was given the same task at the same pace",
+           "prepare one easier and one harder version of the main task"),
+        ev("same_few", "Same few students answering", -3, "the same few students did all the answering",
+           "note who has spoken this period and deliberately bring in the others"),
       ],
     },
     {
       id: "assessment",
       name: "Assessment for Learning",
-      prompt: "How was understanding checked?",
+      prompt: "How did they find out who had understood?",
       max: 10,
       mode: "checklist",
       options: [
-        ev("checks", "Checks understanding", 2, "understanding was checked during the lesson"),
-        ev("oral", "Oral assessment", 1, "oral assessment was used"),
-        ev("feedback", "Immediate feedback", 1, "feedback was immediate"),
-        ev("misconceptions", "Corrects misconceptions", 1, "misconceptions were corrected"),
-        ev("limited", "Assessment limited", -5, "in-lesson assessment was limited",
-           "more frequent checks for understanding during the lesson"),
+        ev("checks_midway", "Checks understanding mid-lesson", 2, "understanding was checked during the lesson, not only at the end"),
+        ev("looks_at_books", "Looks at notebooks while circulating", 1, "notebooks were looked at while circulating"),
+        ev("corrects_on_spot", "Corrects misconception on the spot", 1, "a misconception was corrected on the spot"),
+        ev("specific_feedback", "Feedback is specific", 1, "feedback named what was right rather than only praising"),
+        ev("any_doubts", "Only asked if there were doubts", -4, "understanding was checked only by asking if there were doubts",
+           "replace 'any doubts?' with a question only a student who understood could answer"),
+        ev("errors_uncorrected", "Errors left uncorrected", -5, "student errors were left uncorrected",
+           "stop and reteach the moment the same error appears twice"),
       ],
     },
     {
       id: "resources",
       name: "Board & Resources",
-      prompt: "How were the board and resources used?",
+      prompt: "How were the board and materials used?",
       max: 5,
       mode: "checklist",
       options: [
-        ev("board", "Clear board work", 1, "board work was clear"),
-        ev("smartboard", "SmartBoard used well", 1, "the SmartBoard was used effectively"),
-        ev("appropriate_res", "Appropriate resources", 1, "resources were appropriate"),
-        ev("supports", "Resources aid learning", 1, "resources supported the learning"),
-        ev("underused", "Resources underused", -3, "available resources were underused",
-           "fuller use of the board and available teaching aids"),
+        ev("legible", "Board organised and legible", 1, "board work was organised and legible"),
+        ev("terms_visible", "Key terms left visible", 1, "key terms were left on the board for the lesson"),
+        ev("aid_purposeful", "Aid used purposefully", 1, "the teaching aid served the objective"),
+        ev("students_used", "Students used the resource", 1, "students used the resource themselves"),
+        ev("erased_early", "Cluttered or erased too soon", -3, "the board was cluttered or wiped before students had used it",
+           "keep one corner of the board for key terms and leave it until the close"),
       ],
     },
     {
       id: "closure",
-      name: "Closure",
+      name: "Closure & Homework",
       prompt: "How did the lesson end?",
-      max: 10,
+      max: 5,
       mode: "checklist",
       options: [
-        ev("recap", "Recap conducted", 2, "the lesson was recapped"),
-        ev("objective_revisited", "Objective revisited", 1, "the objective was revisited"),
-        ev("understanding_checked", "Understanding checked", 1, "understanding was checked at the close"),
-        ev("good_closure", "Good closure", 1, "the lesson closed well"),
-        ev("no_consolidation", "No consolidation", -5, "there was no clear consolidation",
-           "closing with a recap that checks the objective was met"),
+        ev("students_recap", "Students did the recap", 1, "students, not the teacher, did the recap"),
+        ev("objective_revisited", "Objective revisited", 1, "the objective was revisited at the close"),
+        ev("hw_explained", "Homework explained, not dictated", 1, "homework was explained rather than dictated"),
+        ev("next_lesson", "Linked to next lesson", 1, "the close linked forward to the next lesson"),
+        ev("no_consolidation", "No consolidation", -3, "the lesson ended without consolidation",
+           "reserve the last four minutes for students to say what they have learned"),
+        ev("hw_after_bell", "Homework given after the bell", -2, "homework was given once students had packed up",
+           "set homework with five minutes to go, while you still have their attention"),
       ],
     },
   ],
@@ -286,6 +330,9 @@ export const IN_CAMPUS: Rubric = {
 // someone, not how an employee is performing. Every criterion is a five-level
 // scale, because a stranger's single lesson does not give enough evidence for
 // an evidence checklist, and a hiring decision wants comparability above all.
+//
+// The actions here are written for the PANEL, not the candidate: what to probe,
+// what to require, what induction would be needed on appointment.
 // ===========================================================================
 export const DEMO: Rubric = {
   id: "demo",
@@ -303,14 +350,17 @@ export const DEMO: Rubric = {
       options: scale(20, [
         ["Exceptional", "subject knowledge was exceptional"],
         ["Strong", "subject knowledge was strong"],
-        ["Good", "subject knowledge was sound", "deepening command of the subject"],
-        ["Average", "subject knowledge was average", "deepening command of the subject"],
-        ["Weak", "subject knowledge was weak", "substantial strengthening of subject knowledge"],
+        ["Good", "subject knowledge was sound",
+         "probe depth at interview with two questions from the senior syllabus"],
+        ["Average", "subject knowledge was average",
+         "probe depth at interview with two questions from the senior syllabus"],
+        ["Weak", "subject knowledge was weak",
+         "do not appoint to senior classes on this evidence"],
       ]),
     },
     {
-      // 5 rather than 10: a candidate prepares one lesson specially for a demo,
-      // so how well it is planned says less about them than how they teach it.
+      // 5 marks: a candidate prepares one lesson specially for a demo, so how
+      // well it is planned says less about them than how they teach it.
       id: "planning",
       name: "Lesson Planning",
       prompt: "How was the lesson structured?",
@@ -319,9 +369,12 @@ export const DEMO: Rubric = {
       options: scale(5, [
         ["Excellent structure", "the lesson was excellently structured"],
         ["Well planned", "the lesson was well planned"],
-        ["Adequate", "lesson planning was adequate", "a tighter lesson structure"],
-        ["Some gaps", "there were gaps in the lesson plan", "a tighter lesson structure"],
-        ["Poorly structured", "the lesson was poorly structured", "planning a clear beginning, middle and close"],
+        ["Adequate", "lesson planning was adequate",
+         "ask to see a week of lesson plans before confirming"],
+        ["Some gaps", "there were gaps in the lesson plan",
+         "ask to see a week of lesson plans before confirming"],
+        ["Poorly structured", "the lesson was poorly structured",
+         "require a planning-format induction in the first month"],
       ]),
     },
     {
@@ -333,23 +386,29 @@ export const DEMO: Rubric = {
       options: scale(10, [
         ["Exceptionally clear", "explanation was exceptionally clear"],
         ["Clear", "explanation was clear"],
-        ["Generally clear", "explanation was generally clear", "sharper, better-sequenced explanation"],
-        ["Somewhat unclear", "explanation was somewhat unclear", "sharper, better-sequenced explanation"],
-        ["Difficult to follow", "explanation was difficult to follow", "rebuilding explanations around simpler steps"],
+        ["Generally clear", "explanation was generally clear",
+         "pair with a strong mentor for the first term"],
+        ["Somewhat unclear", "explanation was somewhat unclear",
+         "pair with a strong mentor for the first term"],
+        ["Difficult to follow", "explanation was difficult to follow",
+         "not suitable for board classes without substantial development"],
       ]),
     },
     {
       id: "communication",
       name: "Communication",
-      prompt: "Language, voice and clarity?",
+      prompt: "Language, voice and presence in speech?",
       max: 10,
       mode: "scale",
       options: scale(10, [
         ["Excellent", "communication was excellent"],
         ["Very good", "communication was very good"],
-        ["Good", "communication was good", "stronger voice projection and pace"],
-        ["Average", "communication was average", "stronger voice projection and pace"],
-        ["Weak", "communication was weak", "significant work on classroom communication"],
+        ["Good", "communication was good",
+         "check audibility in a full-size room before confirming"],
+        ["Average", "communication was average",
+         "check audibility in a full-size room before confirming"],
+        ["Weak", "communication was weak",
+         "language and delivery would need sustained support"],
       ]),
     },
     {
@@ -361,9 +420,12 @@ export const DEMO: Rubric = {
       options: scale(10, [
         ["Highly effective", "the teaching approach was highly effective"],
         ["Effective", "the teaching approach was effective"],
-        ["Appropriate", "the teaching approach was appropriate", "a wider range of teaching strategies"],
-        ["Limited", "the teaching approach was limited", "a wider range of teaching strategies"],
-        ["Inappropriate", "the approach was unsuited to the class", "matching method to the age group and topic"],
+        ["Appropriate", "the teaching approach was appropriate",
+         "induct on activity-based and competency-based methods"],
+        ["Limited", "the teaching approach was limited",
+         "induct on activity-based and competency-based methods"],
+        ["Inappropriate", "the approach was unsuited to the class",
+         "would need close supervision for at least a term"],
       ]),
     },
     {
@@ -375,9 +437,12 @@ export const DEMO: Rubric = {
       options: scale(10, [
         ["Highly engaged", "students were highly engaged"],
         ["Mostly engaged", "students were mostly engaged"],
-        ["Moderate", "student engagement was moderate", "drawing more of the class into the lesson"],
-        ["Low", "student engagement was low", "drawing more of the class into the lesson"],
-        ["Very low", "students were largely disengaged", "re-engaging the class with participatory activity"],
+        ["Moderate", "student engagement was moderate",
+         "note this was an unfamiliar class, and weigh accordingly"],
+        ["Low", "student engagement was low",
+         "ask how they would have opened the lesson differently"],
+        ["Very low", "students were largely disengaged",
+         "ask how they would have opened the lesson differently"],
       ]),
     },
     {
@@ -389,23 +454,29 @@ export const DEMO: Rubric = {
       options: scale(10, [
         ["Excellent questioning", "questioning was excellent"],
         ["Good probing", "good probing questions were asked"],
-        ["Some HOTS", "there was some higher-order questioning", "more open and higher-order questions"],
-        ["Mostly recall", "questioning stayed mostly at recall level", "more open and higher-order questions"],
-        ["Limited questioning", "there was very little questioning", "using questioning as a core teaching tool"],
+        ["Some HOTS", "there was some higher-order questioning",
+         "induct on competency-based questioning in the first term"],
+        ["Mostly recall", "questioning stayed mostly at recall level",
+         "induct on competency-based questioning in the first term"],
+        ["Limited questioning", "there was very little questioning",
+         "a significant gap against CBSE competency requirements"],
       ]),
     },
     {
       id: "presence",
       name: "Classroom Presence",
-      prompt: "Presence and control?",
+      prompt: "Presence and control with a class they do not know?",
       max: 10,
       mode: "scale",
       options: scale(10, [
         ["Excellent presence", "classroom presence was excellent"],
         ["Strong control", "classroom control was strong"],
-        ["Good control", "classroom control was good", "building a firmer classroom presence"],
-        ["Average", "classroom presence was average", "building a firmer classroom presence"],
-        ["Weak", "classroom presence was weak", "developing authority and command of the room"],
+        ["Good control", "classroom control was good",
+         "start with middle classes rather than senior"],
+        ["Average", "classroom presence was average",
+         "start with middle classes rather than senior"],
+        ["Weak", "classroom presence was weak",
+         "would struggle with a full class unsupported"],
       ]),
     },
     {
@@ -417,9 +488,12 @@ export const DEMO: Rubric = {
       options: scale(5, [
         ["Excellent use", "resources were used excellently"],
         ["Effective", "resources were used effectively"],
-        ["Adequate", "resource use was adequate", "fuller use of the board and teaching aids"],
-        ["Limited", "resource use was limited", "fuller use of the board and teaching aids"],
-        ["Not used", "no teaching resources were used", "preparing teaching aids for the lesson"],
+        ["Adequate", "resource use was adequate",
+         "induct on the SmartBoard and lab resources available here"],
+        ["Limited", "resource use was limited",
+         "induct on the SmartBoard and lab resources available here"],
+        ["Not used", "no teaching resources were used",
+         "ask what they would have used with a day's notice"],
       ]),
     },
     {
@@ -431,14 +505,17 @@ export const DEMO: Rubric = {
       options: scale(5, [
         ["Excellent", "assessment and closure were excellent"],
         ["Good", "assessment and closure were good"],
-        ["Adequate", "the closure was adequate", "closing with a recap and a check for understanding"],
-        ["Weak", "the closure was weak", "closing with a recap and a check for understanding"],
-        ["Not evident", "no assessment or closure was evident", "planning time to consolidate at the end"],
+        ["Adequate", "the closure was adequate",
+         "induct on assessment-for-learning practice"],
+        ["Weak", "the closure was weak",
+         "induct on assessment-for-learning practice"],
+        ["Not evident", "no assessment or closure was evident",
+         "ask how they would know who had understood"],
       ]),
     },
     {
-      // 5 rather than 10: this summarises the other ten criteria. Weighting it
-      // heavily would score the same evidence a second time.
+      // 5 marks: this summarises the other ten criteria. Weighting it heavily
+      // would score the same evidence a second time.
       id: "potential",
       name: "Teaching Potential",
       prompt: "Overall, how do they read?",
@@ -447,9 +524,12 @@ export const DEMO: Rubric = {
       options: scale(5, [
         ["Exceptional", "the candidate shows exceptional teaching potential"],
         ["Highly suitable", "the candidate is highly suitable for the role"],
-        ["Suitable", "the candidate is suitable for the role", "induction support in the first term"],
-        ["Consider", "the candidate is worth further consideration", "a second demonstration lesson before deciding"],
-        ["Not suitable", "the candidate is not suitable for this role", "no appointment at this stage"],
+        ["Suitable", "the candidate is suitable for the role",
+         "appoint with induction support in the first term"],
+        ["Consider", "the candidate is worth further consideration",
+         "a second demonstration lesson before deciding"],
+        ["Not suitable", "the candidate is not suitable for this role",
+         "no appointment at this stage"],
       ]),
     },
   ],
