@@ -19,16 +19,20 @@ export default async function ObservePanel() {
 
   const isPrincipal = profile.role === "principal";
   const isOwner = profile.role === "owner";
-  // Spec 2: management and coordinators have no business here at all.
-  if (!isPrincipal && !isOwner) redirect("/dashboard");
+  const isManagement = profile.role === "management";
+  // Conducting an observation stays the principal's alone. Management reads
+  // only what a principal has chosen to share, which RLS enforces — nothing
+  // else comes back for them, so the lists below are already filtered.
+  // Coordinators have no business here at all.
+  if (!isPrincipal && !isOwner && !isManagement) redirect("/dashboard");
 
   const supabase = createClient();
   const [{ data: obs }, { data: demos }] = await Promise.all([
     supabase.from("observations")
-      .select("id, teacher_name, class_name, section, subject, observed_on, earned, max_marks, pct, grade, status, follow_up")
+      .select("id, teacher_name, class_name, section, subject, observed_on, earned, max_marks, pct, grade, status, follow_up, visible_to_management")
       .order("observed_on", { ascending: false }).limit(25),
     supabase.from("demo_observations")
-      .select("id, candidate_name, subject, demo_class, observed_on, earned, max_marks, pct, grade, status, recommendation")
+      .select("id, candidate_name, subject, demo_class, observed_on, earned, max_marks, pct, grade, status, recommendation, visible_to_management")
       .order("observed_on", { ascending: false }).limit(25),
   ]);
 
@@ -47,8 +51,18 @@ export default async function ObservePanel() {
 
       {isOwner && (
         <div className="notice" style={{ marginTop: 0 }}>
-          <b>Viewing as owner.</b> You can read every campus&rsquo;s observations here.
-          Conducting one is the principal&rsquo;s alone &mdash; they were in the room.
+          <b>Viewing as owner.</b> You can read every campus&rsquo;s observations here,
+          shared or not, and remove one if it was filed in error. Conducting one is
+          the principal&rsquo;s alone &mdash; they were in the room.
+        </div>
+      )}
+
+      {isManagement && (
+        <div className="notice" style={{ marginTop: 0 }}>
+          <b>Shared observations only.</b> Principals decide which of their
+          observations to share upward. Anything not listed here has not been
+          shared &mdash; that is deliberate, so an observation can be written
+          candidly for the teacher rather than for an audience.
         </div>
       )}
 
@@ -90,7 +104,9 @@ export default async function ObservePanel() {
         In-Campus &mdash; recent
       </h3>
       {doneObs.length === 0 ? (
-        <div className="muted" style={{ fontSize: 13.5 }}>No observations recorded yet.</div>
+        <div className="muted" style={{ fontSize: 13.5 }}>
+          {isManagement ? "No observations have been shared with you yet." : "No observations recorded yet."}
+        </div>
       ) : (
         <div className="obs-hist">
           {doneObs.map((o) => (
@@ -102,6 +118,7 @@ export default async function ObservePanel() {
                   {[o.class_name, o.section].filter(Boolean).join("-") || "—"}
                   {o.subject ? ` · ${o.subject}` : ""} · {o.observed_on}
                   {o.follow_up && o.follow_up !== "none" ? ` · ${FOLLOW_UP_LABEL[o.follow_up]}` : ""}
+                  {isPrincipal && o.visible_to_management ? " · shared" : ""}
                 </span>
               </span>
               <span className="obs-hscore">{o.earned}/{o.max_marks}</span>
@@ -114,7 +131,9 @@ export default async function ObservePanel() {
         Demo Classes &mdash; recent
       </h3>
       {doneDemo.length === 0 ? (
-        <div className="muted" style={{ fontSize: 13.5 }}>No demo observations recorded yet.</div>
+        <div className="muted" style={{ fontSize: 13.5 }}>
+          {isManagement ? "No demo observations have been shared with you yet." : "No demo observations recorded yet."}
+        </div>
       ) : (
         <div className="obs-hist">
           {doneDemo.map((o) => (
@@ -125,6 +144,7 @@ export default async function ObservePanel() {
                 <span>
                   {o.subject || "—"}{o.demo_class ? ` · ${o.demo_class}` : ""} · {o.observed_on}
                   {o.recommendation ? ` · ${RECOMMENDATION_LABEL[o.recommendation]}` : ""}
+                  {isPrincipal && o.visible_to_management ? " · shared" : ""}
                 </span>
               </span>
               <span className="obs-hscore">{o.earned}/{o.max_marks}</span>
