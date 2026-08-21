@@ -9,10 +9,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const nav: { href: string; label: string }[] = [];
   if (profile.role === "owner") {
-    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" }, { href: "/admin", label: "Admin" });
-  } else if (profile.role === "management" || profile.role === "principal") {
-    // Principal gets the same nav as Management, but both the dashboard and the
-    // faculty records are scoped to their one campus by RLS.
+    // Owner sees observations but cannot conduct one — an observation is a
+    // judgement made in a room they were not standing in.
+    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" },
+             { href: "/observe", label: "Observations" }, { href: "/admin", label: "Admin" });
+  } else if (profile.role === "principal") {
+    // Class Observation is the principal's alone (spec 2). Management is
+    // deliberately absent from this list, and blocked by RLS besides.
+    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" },
+             { href: "/observe", label: "Class Observation" });
+  } else if (profile.role === "management") {
     nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" });
   } else {
     nav.push({ href: "/verify", label: "New Verification" }, { href: "/reports", label: "My Reports" });

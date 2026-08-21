@@ -1,0 +1,267 @@
+/* ===========================================================================
+   CLASS OBSERVATION — mobile first, and mobile first for a reason.
+   A principal does this standing at the back of a classroom holding a phone in
+   one hand. Every size below is set for a thumb, not a mouse pointer: nothing
+   tappable is under 52px, nothing needs two hands, and nothing scrolls
+   sideways. Desktop simply gets the same layout with more air around it.
+   =========================================================================== */
+
+.obs {
+  max-width: 640px;
+  margin: 0 auto;
+  /* Room for the fixed nav bar, plus the phone's own home indicator. */
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+.obs-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.obs-h { font-family: var(--font-ui); font-size: 17px; font-weight: 700; color: var(--navy); line-height: 1.3; }
+.obs-sub { font-size: 12.5px; color: var(--sub); margin-top: 2px; }
+
+.obs-save { font-size: 11px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; padding-top: 3px; }
+.obs-save-saving { color: var(--sub); }
+.obs-save-saved { color: var(--teal); }
+
+/* ---- progress rail: every completed criterion stays reachable ---- */
+.obs-rail {
+  display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.obs-rail::-webkit-scrollbar { display: none; }
+.obs-pip {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+  border: 1.5px solid var(--line); background: #fff; color: var(--sub);
+  font-size: 13px; font-weight: 700; font-family: var(--font-body);
+  cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.obs-pip.done { background: var(--chip); color: var(--teal); border-color: var(--teal); }
+.obs-pip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.obs-pip-review { border-style: dashed; }
+
+/* ---- the criterion card ---- */
+.obs-card {
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 15px; margin-bottom: 14px;
+}
+.obs-count { font-size: 12px; font-weight: 700; color: var(--teal); letter-spacing: 1.5px; }
+.obs-name { font-family: var(--font-ui); font-size: 21px; color: var(--navy); margin: 4px 0 2px; line-height: 1.25; }
+.obs-prompt { font-size: 15px; color: var(--ink); margin: 0 0 12px; line-height: 1.45; }
+.obs-mode {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
+  text-transform: uppercase; color: var(--sub); margin-bottom: 9px;
+}
+.obs-marks { color: var(--teal); }
+
+/* ---- options: the thing being tapped most, so the biggest thing on screen ---- */
+.obs-options { display: flex; flex-direction: column; gap: 8px; }
+.obs-opt {
+  display: flex; align-items: center; gap: 11px;
+  min-height: 54px; padding: 12px 14px; width: 100%;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  font-size: 16px; font-family: var(--font-body); color: var(--ink);
+  text-align: left; cursor: pointer; transition: border-color .12s, background .12s;
+  -webkit-tap-highlight-color: transparent;
+}
+.obs-opt:active { transform: scale(.995); }
+.obs-opt.on { border-color: var(--teal); background: var(--chip); font-weight: 600; }
+.obs-opt.neg.on { border-color: var(--orange); background: #FDF3E7; }
+.obs-tick {
+  flex: 0 0 auto; width: 24px; height: 24px; border-radius: 6px;
+  border: 1.5px solid var(--line); display: grid; place-items: center;
+  font-size: 14px; font-weight: 700; color: var(--teal); background: #fff;
+}
+.obs-opt.on .obs-tick { border-color: var(--teal); }
+.obs-opt.neg.on .obs-tick { color: var(--orange); border-color: var(--orange); }
+
+/* ---- score, always visible, always editable ---- */
+.obs-score { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.obs-score-row { display: flex; align-items: center; gap: 10px; }
+.obs-score-row span { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); }
+.obs-score-row b { font-size: 22px; color: var(--navy); font-family: var(--font-ui); }
+.obs-edit {
+  margin-left: auto; min-height: 40px; padding: 8px 14px;
+  border: 1.5px solid var(--teal); border-radius: 7px; background: #fff;
+  color: var(--teal); font-size: 14px; font-weight: 700;
+  font-family: var(--font-body); cursor: pointer;
+}
+.obs-overridden { font-size: 11.5px; color: var(--orange); font-weight: 600; margin-top: 4px; }
+
+/* Tap a number rather than typing one — no keyboard in a classroom. */
+.obs-dial { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.obs-num {
+  min-width: 46px; min-height: 46px; padding: 0 6px;
+  border: 1.5px solid var(--line); border-radius: 8px; background: #fff;
+  font-size: 16px; font-weight: 700; color: var(--ink);
+  font-family: var(--font-body); cursor: pointer;
+}
+.obs-num.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+.obs-addremark {
+  margin-top: 12px; min-height: 44px; padding: 10px 0;
+  background: none; border: none; color: var(--teal);
+  font-size: 14px; font-weight: 600; font-family: var(--font-body); cursor: pointer;
+}
+.obs-remark {
+  width: 100%; margin-top: 11px; padding: 11px 12px;
+  border: 1.5px solid var(--line); border-radius: 8px;
+  font-size: 15px; font-family: var(--font-body); color: var(--ink);
+  resize: vertical; background: var(--paper);
+}
+
+/* ---- review ---- */
+.obs-review { display: flex; flex-direction: column; gap: 1px; background: var(--line-soft); border-radius: 8px; overflow: hidden; }
+.obs-rrow {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 52px; padding: 10px 13px; background: #fff; border: none; width: 100%;
+  font-size: 15px; font-family: var(--font-body); color: var(--ink);
+  text-align: left; cursor: pointer;
+}
+.obs-rrow:active { background: var(--paper); }
+.obs-rname { display: flex; align-items: center; gap: 7px; }
+.obs-rflag { font-style: normal; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--orange); }
+.obs-rscore { font-weight: 700; color: var(--navy); white-space: nowrap; }
+.obs-rscore.missing { color: var(--orange); }
+.obs-rscore em { font-style: normal; color: var(--teal); margin-left: 5px; }
+
+.obs-total {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 14px; padding: 13px 15px; border: 2px solid var(--navy);
+  border-radius: 10px; background: var(--paper);
+}
+.obs-total span { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--sub); display: block; }
+.obs-total b { font-size: 30px; font-family: var(--font-ui); color: var(--navy); line-height: 1.1; }
+.obs-total b i { font-style: normal; font-size: 17px; color: var(--sub); }
+.obs-grade { padding: 8px 14px; border-radius: 7px; color: #fff; font-weight: 700; font-size: 15px; white-space: nowrap; }
+
+.obs-warn {
+  margin-top: 12px; padding: 11px 13px; border-radius: 8px;
+  background: #FDF3E7; border: 1px solid var(--orange);
+  font-size: 13.5px; color: #8a4b10; line-height: 1.5;
+}
+.obs-summary {
+  margin-top: 14px; padding: 12px 14px; border-radius: 8px;
+  background: var(--paper); border: 1px solid var(--line-soft);
+}
+.obs-summary p { margin: 0 0 7px; font-size: 14px; line-height: 1.55; }
+.obs-summary b { color: var(--navy); }
+.obs-summary span { font-size: 11.5px; color: var(--sub); font-style: italic; }
+
+.obs-label {
+  display: block; margin: 18px 0 8px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px; color: var(--sub);
+}
+.obs-label span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+.obs-err {
+  margin-top: 12px; padding: 11px 13px; border-radius: 8px;
+  background: #FDECEC; border: 1px solid var(--red); color: #8a1f1f; font-size: 13.5px;
+}
+.obs-submit {
+  width: 100%; min-height: 58px; margin-top: 18px;
+  border: none; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(135deg, var(--navy), var(--teal));
+  color: #fff; font-size: 17px; font-weight: 700;
+  font-family: var(--font-ui); letter-spacing: .3px;
+}
+.obs-submit:disabled { background: var(--line); color: var(--sub); cursor: not-allowed; }
+.obs-locknote { font-size: 11.5px; color: var(--sub); line-height: 1.55; margin: 9px 0 0; text-align: center; }
+
+/* ---- fixed nav: reachable with a thumb, never scrolls away ---- */
+.obs-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255,255,255,.97); border-top: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+.obs-back, .obs-next {
+  min-height: 52px; padding: 0 20px; border-radius: 9px; cursor: pointer;
+  font-size: 16px; font-weight: 700; font-family: var(--font-body);
+}
+.obs-back { border: 1.5px solid var(--line); background: #fff; color: var(--sub); }
+.obs-back:disabled { opacity: .4; cursor: not-allowed; }
+.obs-next { flex: 1; border: none; background: var(--navy); color: #fff; }
+.obs-navtotal { flex: 1; text-align: right; font-size: 17px; font-weight: 700; color: var(--navy); font-family: var(--font-ui); }
+
+/* ---- module landing & start screens ---- */
+.obs-pick { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+.obs-tile {
+  display: block; padding: 18px 17px; border-radius: 11px; text-decoration: none;
+  border: 1.5px solid var(--line); background: #fff; min-height: 84px;
+}
+.obs-tile:active { background: var(--paper); }
+.obs-tile b { display: block; font-family: var(--font-ui); font-size: 18px; color: var(--navy); margin-bottom: 3px; }
+.obs-tile span { display: block; font-size: 13.5px; color: var(--sub); line-height: 1.5; }
+.obs-tile-demo { border-left: 4px solid var(--gold-soft); }
+.obs-tile-campus { border-left: 4px solid var(--teal); }
+
+.obs-resume {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 15px; border-radius: 10px; margin-bottom: 14px;
+  background: #FDF3E7; border: 1px solid var(--gold-soft);
+}
+.obs-resume div { font-size: 13.5px; color: #7a5c00; line-height: 1.45; }
+.obs-resume b { display: block; color: var(--navy); font-size: 15px; }
+.obs-resume a {
+  flex: 0 0 auto; min-height: 46px; padding: 12px 17px; border-radius: 8px;
+  background: var(--navy); color: #fff; text-decoration: none;
+  font-size: 15px; font-weight: 700; white-space: nowrap;
+}
+
+.obs-field { margin-bottom: 13px; }
+.obs-field > label {
+  display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px; color: var(--sub);
+}
+.obs-input {
+  width: 100%; min-height: 52px; padding: 13px 14px;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  font-size: 16px; /* 16px stops iOS zooming the page on focus */
+  font-family: var(--font-body); color: var(--ink);
+}
+.obs-start {
+  width: 100%; min-height: 58px; margin-top: 6px; border: none; border-radius: 10px;
+  background: linear-gradient(135deg, var(--navy), var(--teal)); color: #fff;
+  font-size: 17px; font-weight: 700; font-family: var(--font-ui); cursor: pointer;
+}
+.obs-start:disabled { background: var(--line); color: var(--sub); cursor: not-allowed; }
+
+.obs-teachers { display: flex; flex-direction: column; gap: 7px; max-height: 320px; overflow-y: auto; }
+.obs-teacher {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 54px; padding: 11px 14px; width: 100%; text-align: left;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  font-size: 16px; font-family: var(--font-body); color: var(--ink); cursor: pointer;
+}
+.obs-teacher.on { border-color: var(--teal); background: var(--chip); font-weight: 600; }
+.obs-teacher small { color: var(--sub); font-size: 12.5px; font-weight: 400; }
+
+/* ---- history ---- */
+.obs-hist { display: flex; flex-direction: column; gap: 8px; }
+.obs-hrow {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff;
+  text-decoration: none; min-height: 60px;
+}
+.obs-hrow:active { background: var(--paper); }
+.obs-hmain { flex: 1; min-width: 0; }
+.obs-hmain b { display: block; font-size: 15px; color: var(--navy); }
+.obs-hmain span { display: block; font-size: 12.5px; color: var(--sub); margin-top: 2px; }
+.obs-hgrade {
+  flex: 0 0 auto; min-width: 54px; text-align: center; padding: 7px 9px;
+  border-radius: 7px; color: #fff; font-weight: 700; font-size: 14px;
+}
+.obs-hscore { flex: 0 0 auto; font-size: 13px; color: var(--sub); font-weight: 600; }
+
+@media (min-width: 700px) {
+  .obs-nav { position: static; background: none; border-top: none; padding: 14px 0 0; backdrop-filter: none; }
+  .obs { padding-bottom: 20px; }
+  .obs-options { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+@media print {
+  .obs-nav, .obs-rail, .obs-save { display: none; }
+}
