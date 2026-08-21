@@ -10,9 +10,11 @@
 // criterion is too complicated. Labels are 1-4 words. The interpretation lives
 // in `phrase`, which is used only to compose the written report afterwards.
 //
-// TOTALS ARE COMPUTED FROM THIS FILE, never hardcoded. The marks below are as
-// specified; note they sum to more than 100 (see rubricTotal()), so the report
-// grades on PERCENTAGE. Changing any `max` here is the one-line way to retune.
+// TOTALS ARE COMPUTED FROM THIS FILE, never hardcoded, and both rubrics come to
+// exactly 100. Change any `max` and the totals, the review screen and the report
+// all follow automatically — but a CHECKLIST criterion also needs its weights
+// retuned, because positives are set to sum to (max - half), so that the full
+// evidence earns full marks. Scales need nothing: they derive from max.
 // ---------------------------------------------------------------------------
 
 /**
@@ -108,7 +110,7 @@ function ev(id: string, label: string, points: number, phrase: string, fix?: str
 }
 
 // ===========================================================================
-// A. IN-CAMPUS CLASS OBSERVATION
+// A. IN-CAMPUS CLASS OBSERVATION — 100 marks
 // ===========================================================================
 export const IN_CAMPUS: Rubric = {
   id: "in_campus",
@@ -116,17 +118,20 @@ export const IN_CAMPUS: Rubric = {
   blurb: "Observing a teacher already on this campus, during a regular lesson.",
   criteria: [
     {
+      // 5 rather than 10: preparation is the thing a visitor can least directly
+      // observe. You infer it from how the lesson unfolds, which the other
+      // criteria already measure head-on.
       id: "prep",
       name: "Preparation",
       prompt: "How prepared was the lesson?",
-      max: 10,
+      max: 5,
       mode: "checklist",
       options: [
-        ev("well_prepared", "Well prepared", 2, "the lesson was well prepared"),
+        ev("well_prepared", "Well prepared", 1, "the lesson was well prepared"),
         ev("objective_clear", "Objective clear", 1, "the lesson objective was clear"),
         ev("resources_ready", "Resources ready", 1, "resources were ready at hand"),
         ev("structured", "Lesson structured", 1, "the lesson followed a clear structure"),
-        ev("needs_improvement", "Preparation weak", -5, "lesson preparation needs strengthening",
+        ev("needs_improvement", "Preparation weak", -3, "lesson preparation needs strengthening",
            "planning the lesson and its resources before the period"),
       ],
     },
@@ -147,18 +152,21 @@ export const IN_CAMPUS: Rubric = {
       ],
     },
     {
+      // 10 rather than 15: "Good questioning" is one of its options, and
+      // questioning has its own 10-mark criterion below. At 15 the same
+      // evidence was being paid for twice.
       id: "method",
       name: "Teaching Methodology",
       prompt: "How was the lesson taught?",
-      max: 15,
+      max: 10,
       mode: "checklist",
       options: [
         ev("student_centred", "Student-centred", 2, "the approach was student-centred"),
         ev("questioning", "Good questioning", 1, "questioning was used well"),
         ev("real_life", "Real-life links", 1, "the topic was linked to real life"),
-        ev("thinking", "Encourages thinking", 2, "students were pushed to think"),
+        ev("thinking", "Encourages thinking", 1, "students were pushed to think"),
         ev("appropriate", "Appropriate method", 1, "the method suited the topic"),
-        ev("lecture_only", "Mostly lecture", -8, "the lesson was largely lecture-based",
+        ev("lecture_only", "Mostly lecture", -5, "the lesson was largely lecture-based",
            "building in more student-led activity"),
       ],
     },
@@ -272,7 +280,7 @@ export const IN_CAMPUS: Rubric = {
 };
 
 // ===========================================================================
-// B. DEMO CLASS OBSERVATION
+// B. DEMO CLASS OBSERVATION — 100 marks
 //
 // A separate rubric for a separate purpose: this judges whether to HIRE
 // someone, not how an employee is performing. Every criterion is a five-level
@@ -285,6 +293,8 @@ export const DEMO: Rubric = {
   blurb: "Assessing a candidate's teaching potential from a demonstration lesson.",
   criteria: [
     {
+      // The single heaviest criterion, deliberately. For a hire, what they know
+      // is the thing least likely to improve on its own.
       id: "subject",
       name: "Subject Knowledge",
       prompt: "Command of the subject?",
@@ -299,12 +309,14 @@ export const DEMO: Rubric = {
       ]),
     },
     {
+      // 5 rather than 10: a candidate prepares one lesson specially for a demo,
+      // so how well it is planned says less about them than how they teach it.
       id: "planning",
       name: "Lesson Planning",
       prompt: "How was the lesson structured?",
-      max: 10,
+      max: 5,
       mode: "scale",
-      options: scale(10, [
+      options: scale(5, [
         ["Excellent structure", "the lesson was excellently structured"],
         ["Well planned", "the lesson was well planned"],
         ["Adequate", "lesson planning was adequate", "a tighter lesson structure"],
@@ -316,9 +328,9 @@ export const DEMO: Rubric = {
       id: "explanation",
       name: "Explanation",
       prompt: "How clear were the explanations?",
-      max: 15,
+      max: 10,
       mode: "scale",
-      options: scale(15, [
+      options: scale(10, [
         ["Exceptionally clear", "explanation was exceptionally clear"],
         ["Clear", "explanation was clear"],
         ["Generally clear", "explanation was generally clear", "sharper, better-sequenced explanation"],
@@ -330,9 +342,9 @@ export const DEMO: Rubric = {
       id: "communication",
       name: "Communication",
       prompt: "Language, voice and clarity?",
-      max: 15,
+      max: 10,
       mode: "scale",
-      options: scale(15, [
+      options: scale(10, [
         ["Excellent", "communication was excellent"],
         ["Very good", "communication was very good"],
         ["Good", "communication was good", "stronger voice projection and pace"],
@@ -344,9 +356,9 @@ export const DEMO: Rubric = {
       id: "pedagogy",
       name: "Pedagogy",
       prompt: "How effective was the approach?",
-      max: 15,
+      max: 10,
       mode: "scale",
-      options: scale(15, [
+      options: scale(10, [
         ["Highly effective", "the teaching approach was highly effective"],
         ["Effective", "the teaching approach was effective"],
         ["Appropriate", "the teaching approach was appropriate", "a wider range of teaching strategies"],
@@ -425,12 +437,14 @@ export const DEMO: Rubric = {
       ]),
     },
     {
+      // 5 rather than 10: this summarises the other ten criteria. Weighting it
+      // heavily would score the same evidence a second time.
       id: "potential",
       name: "Teaching Potential",
       prompt: "Overall, how do they read?",
-      max: 10,
+      max: 5,
       mode: "scale",
-      options: scale(10, [
+      options: scale(5, [
         ["Exceptional", "the candidate shows exceptional teaching potential"],
         ["Highly suitable", "the candidate is highly suitable for the role"],
         ["Suitable", "the candidate is suitable for the role", "induction support in the first term"],

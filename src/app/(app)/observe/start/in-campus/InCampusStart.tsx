@@ -1,18 +1,39 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import TeacherPicker, { type Fac } from "@/components/TeacherPicker";
 import { startInCampusAction } from "@/actions/observations";
 
-export interface TeacherOption {
-  id: string; name: string; subject: string;
-  lastClass: string; lastSubject: string;
+export interface TeacherOption extends Fac {
+  /** What this teacher was last verified teaching, used only to pre-fill. */
+  lastClass: string;
+  lastSubject: string;
 }
 
-export default function InCampusStart({ teachers }: { teachers: TeacherOption[] }) {
+/**
+ * Choosing who is being observed.
+ *
+ * This uses the SAME picker as notebook verification rather than a list of its
+ * own. That matters: the picker already normalises the name, offers an exact
+ * match, surfaces near matches, and carries the "different person with the same
+ * name" escape hatch. A second, simpler list here would quietly reintroduce the
+ * duplicate-teacher problem that picker exists to prevent — and a duplicate is
+ * worse in a personnel record than anywhere else, because it splits one
+ * teacher's history into two half-empty files.
+ *
+ * It also means a principal can ADD a teacher. Without that, anyone who has
+ * never had a notebook verification filed could not be observed at all, which
+ * is exactly backwards: a teacher nobody has checked on is the one most worth
+ * walking in to see.
+ */
+export default function InCampusStart({
+  teachers, campusId,
+}: { teachers: TeacherOption[]; campusId: string }) {
   const router = useRouter();
-  const [q, setQ] = useState("");
-  const [picked, setPicked] = useState<TeacherOption | null>(null);
+  const [list, setList] = useState<TeacherOption[]>(teachers);
+  const [facultyId, setFacultyId] = useState<string | null>(null);
+  const [teacherName, setTeacherName] = useState("");
   const [cls, setCls] = useState("");
   const [section, setSection] = useState("");
   const [subject, setSubject] = useState("");
@@ -20,29 +41,34 @@ export default function InCampusStart({ teachers }: { teachers: TeacherOption[] 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const matches = useMemo(() => {
-    const n = q.trim().toLowerCase();
-    const list = n ? teachers.filter((t) => t.name.toLowerCase().includes(n)) : teachers;
-    return list.slice(0, 40);
-  }, [q, teachers]);
+  function onPick(id: string | null, name: string, picked?: string | null) {
+    setFacultyId(id);
+    setTeacherName(name);
+    setErr(null);
+    if (!id) { setCls(""); setSection(""); setSubject(""); return; }
 
-  function choose(t: TeacherOption) {
-    setPicked(t);
+    const known = list.find((t) => t.id === id);
+    if (!known) {
+      // Newly created by the picker. Keep it in the local list so the label
+      // renders, but there is nothing to pre-fill from.
+      setList((l) => [...l, { id, name, subject: picked ?? null, lastClass: "", lastSubject: "" }]);
+      setSubject(picked || "");
+      return;
+    }
     // Pre-fill from what this teacher was last verified teaching. A guess the
-    // principal can see and correct beats an empty field they must type into
+    // principal can see and correct beats an empty field they have to type into
     // while standing at the back of a classroom.
-    const parts = t.lastClass.split(/[-\s]+/).filter(Boolean);
+    const parts = known.lastClass.split(/[-\s]+/).filter(Boolean);
     setCls(parts[0] || "");
     setSection(parts[1] || "");
-    setSubject(t.lastSubject || t.subject || "");
+    setSubject(known.lastSubject || known.subject || picked || "");
   }
 
   async function start() {
-    if (!picked) return;
+    if (!facultyId) return;
     setBusy(true); setErr(null);
     const res = await startInCampusAction({
-      facultyId: picked.id, teacherName: picked.name,
-      className: cls, section, subject, topic,
+      facultyId, teacherName, className: cls, section, subject, topic,
     });
     setBusy(false);
     if (!res.ok || !res.id) { setErr(res.error || "Could not start."); return; }
@@ -57,35 +83,25 @@ export default function InCampusStart({ teachers }: { teachers: TeacherOption[] 
 
       <div className="obs-card">
         <div className="obs-count">IN-CAMPUS</div>
-        <h2 className="obs-name">{picked ? picked.name : "Who are you observing?"}</h2>
+        <h2 className="obs-name">Who are you observing?</h2>
 
-        {!picked ? (
-          <>
-            <input className="obs-input" value={q} autoComplete="off"
-              placeholder="Search teachers on this campus"
-              onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 11 }} />
-            {teachers.length === 0 ? (
-              <div className="muted" style={{ fontSize: 13.5 }}>
-                No active teachers on this campus yet. They are added when a
-                coordinator files their first notebook verification.
-              </div>
-            ) : (
-              <div className="obs-teachers">
-                {matches.map((t) => (
-                  <button key={t.id} type="button" className="obs-teacher" onClick={() => choose(t)}>
-                    <span>{t.name}</span>
-                    <small>{t.lastClass || t.subject || ""}</small>
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <button type="button" className="obs-addremark" style={{ marginTop: 0 }}
-              onClick={() => setPicked(null)}>Change teacher</button>
+        <TeacherPicker
+          faculty={list} campusId={campusId}
+          valueId={facultyId} valueName={teacherName}
+          onPick={onPick}
+        />
 
-            <div className="obs-field">
+        {!facultyId && (
+          <div className="muted" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.6 }}>
+            {list.length === 0
+              ? "No teachers on this campus yet. Type a name to add the first one."
+              : "Not on the list? Type their name and add them — a teacher who has never had a notebook verification can still be observed."}
+          </div>
+        )}
+
+        {facultyId && (
+          <>
+            <div className="obs-field" style={{ marginTop: 16 }}>
               <label>Class</label>
               <input className="obs-input" value={cls} placeholder="e.g. VIII"
                 onChange={(e) => setCls(e.target.value)} />

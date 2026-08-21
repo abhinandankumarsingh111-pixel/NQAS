@@ -64,7 +64,9 @@ function sanitise(kind: Kind, raw: unknown): Answers {
     const score = Math.max(0, Math.min(c.max, Number.isFinite(asked) ? asked : auto));
     const remark = typeof a.remark === "string" ? a.remark.trim().slice(0, 600) : undefined;
 
-    clean[c.id] = { selected, auto, score, ...(remark ? { remark } : {}) };
+    // Stamp the criterion's current worth onto the answer so this record still
+    // reads correctly after the rubric is reweighted.
+    clean[c.id] = { selected, auto, score, max: c.max, ...(remark ? { remark } : {}) };
   }
   return clean;
 }

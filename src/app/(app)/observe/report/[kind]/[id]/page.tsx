@@ -4,7 +4,7 @@ import { getProfile, createClient } from "@/lib/supabase/server";
 import PrintButton from "@/components/PrintButton";
 import AmendForm from "@/components/AmendForm";
 import {
-  RUBRICS, FOLLOW_UP_LABEL, RECOMMENDATION_LABEL, type RubricId,
+  RUBRICS, FOLLOW_UP_LABEL, RECOMMENDATION_LABEL, rubricTotal, type RubricId,
 } from "@/lib/observation-rubrics";
 import { scoreRows, GRADE_COLOR, type Answers } from "@/lib/observation-scoring";
 
@@ -39,6 +39,11 @@ export default async function ObservationReport({ params }: { params: { kind: st
   const grade = o.grade || "C";
   // Only the campus principal may correct a submitted record; the owner reads.
   const canAmend = profile.role === "principal" && o.status === "submitted";
+  // A record filed before the rubric was reweighted keeps its own totals. Say so
+  // rather than let a reader compare it against today's marks and conclude the
+  // arithmetic is broken.
+  const olderRubric = o.status === "submitted"
+    && typeof o.max_marks === "number" && o.max_marks !== rubricTotal(rubric);
 
   const meta: [string, string][] = [
     ["Type", isDemo ? "Demo Class Observation" : "In-Campus Class Observation"],
@@ -88,6 +93,14 @@ export default async function ObservationReport({ params }: { params: { kind: st
           <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 18px", fontSize: 13, marginBottom: 14 }}>
             {meta.map(([k, v]) => <div key={k}><b>{k}:</b> {v}</div>)}
           </div>
+
+          {olderRubric && (
+            <div className="obs-warn" style={{ marginBottom: 12 }}>
+              Scored when this rubric was worth {o.max_marks} marks; it is now worth{" "}
+              {rubricTotal(rubric)}. The scores below are exactly as recorded on the day,
+              and the percentage is calculated against the marks that applied then.
+            </div>
+          )}
 
           <div className="obs-total" style={{ borderColor: GRADE_COLOR[grade], marginBottom: 16 }}>
             <div>
