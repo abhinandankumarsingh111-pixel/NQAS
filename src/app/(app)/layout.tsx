@@ -14,12 +14,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" },
              { href: "/observe", label: "Observations" }, { href: "/admin", label: "Admin" });
   } else if (profile.role === "principal") {
-    // Class Observation is the principal's alone (spec 2). Management is
-    // deliberately absent from this list, and blocked by RLS besides.
+    // Class Observation is the principal's alone (spec 2).
     nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" },
              { href: "/observe", label: "Class Observation" });
   } else if (profile.role === "management") {
-    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" });
+    // Management sees observations a principal chose to share, and nothing else.
+    nav.push({ href: "/dashboard", label: "Dashboard" }, { href: "/faculty", label: "Faculty" },
+             { href: "/observe", label: "Shared Observations" });
   } else {
     nav.push({ href: "/verify", label: "New Verification" }, { href: "/reports", label: "My Reports" });
   }
