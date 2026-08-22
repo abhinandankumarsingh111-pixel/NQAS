@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  type Criterion, type Rubric, type RubricOption, rubricTotal,
+  type Criterion, type Rubric, type RubricOption, rubricTotal, RETIRED,
 } from "./observation-rubrics";
 
 export interface CriterionAnswer {
@@ -188,19 +188,27 @@ export interface Summary {
 export function summarise(r: Rubric, answers: Answers): Summary {
   const picked = pickedOptions(r, answers);
 
-  // Strengths report what was SEEN. Improvements report what to DO — a teacher
-  // reading "the lesson was largely lecture-based" under "areas for
-  // improvement" learns nothing they did not already know, so each concern
-  // contributes its remedy instead. `action` is optional; a concern without one
-  // falls back to the observation rather than vanishing from the report.
+  // Strengths report what was SEEN.
   const pos = dedupe(picked.filter((p) => p.o.tone === "positive").map((p) => p.o.phrase));
-  const neg = dedupe(picked.filter((p) => p.o.tone === "negative").map((p) => p.o.action || p.o.phrase));
+  // In-Campus concerns contribute their REMEDY, because a teacher reading "the
+  // lesson was largely lecture-based" learns nothing they did not know. An
+  // `action` is optional, so a concern without one falls back to the
+  // observation rather than vanishing from the report.
+  //
+  // Demo concerns contribute what was OBSERVED instead. A demo `action` is
+  // written for the panel ("ask two questions from the senior syllabus at
+  // interview"), so folding it in here produced the nonsense sentence "the
+  // candidate may focus on ask two questions from the senior syllabus". The
+  // panel's actions belong in the plan, which is where they now go.
+  const neg = dedupe(picked.filter((p) => p.o.tone === "negative")
+    .map((p) => (r.id === "demo" ? p.o.phrase : (p.o.action || p.o.phrase))));
 
   return {
     strengths: pos.length ? sentence(joinClauses(pos.slice(0, MAX_CLAUSES))) : "",
     improvements: neg.length
-      ? sentence(`${r.id === "demo" ? "the candidate" : "the teacher"} may focus on `
-                 + joinClauses(neg.slice(0, MAX_CLAUSES)))
+      ? sentence(r.id === "demo"
+          ? `the panel should note that ${joinClauses(neg.slice(0, MAX_CLAUSES))}`
+          : `the teacher may focus on ${joinClauses(neg.slice(0, MAX_CLAUSES))}`)
       : "",
     remarks: r.criteria
       .filter((c) => answers[c.id]?.remark?.trim())
@@ -218,9 +226,17 @@ function dedupe(xs: string[]): string[] {
   return [...new Set(xs)];
 }
 
-/** Per-criterion rows for the review screen and the report table. */
-export function scoreRows(r: Rubric, answers: Answers) {
-  return r.criteria.map((c) => {
+/**
+ * Per-criterion rows for the review screen and the report table.
+ *
+ * Rows for RETIRED criteria are appended after the live ones whenever the
+ * record actually carries an answer for them. Without this, dropping a
+ * criterion from the rubric would silently delete rows from every record ever
+ * scored against it — the total would still say 95 while the table underneath
+ * added up to 85, and nobody reading it a year later would know why.
+ */
+export function scoreRows(r: Rubric, answers: Answers): ScoreRow[] {
+  const row = (c: Criterion, retired: boolean): ScoreRow => {
     const a = answers[c.id];
     // The criterion's worth AS SCORED, so an old report keeps reading correctly
     // after the rubric is retuned.
@@ -237,8 +253,30 @@ export function scoreRows(r: Rubric, answers: Answers) {
         ? c.options.filter((o) => a.selected.includes(o.id)).map((o) => o.label)
         : [],
       remark: a?.remark?.trim() || "",
+      retired,
     };
-  });
+  };
+
+  const live = r.criteria.map((c) => row(c, false));
+  const known = new Set(r.criteria.map((c) => c.id));
+  const gone = (RETIRED[r.id] || [])
+    .filter((c) => !known.has(c.id) && !!answers[c.id])
+    .map((c) => row(c, true));
+  return [...live, ...gone];
+}
+
+export interface ScoreRow {
+  id: string;
+  name: string;
+  max: number;
+  score: number | null;
+  auto: number | null;
+  edited: boolean;
+  answered: boolean;
+  chosen: string[];
+  remark: string;
+  /** Scored under an earlier version of this rubric; no longer asked. */
+  retired: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,4 +369,179 @@ export function concernCriteria(r: Rubric, answers: Answers): string[] {
 /** Name a criterion from its id, for rendering a repeat-concern notice. */
 export function criterionName(r: Rubric, id: string): string {
   return r.criteria.find((c) => c.id === id)?.name || id;
+}
+
+// ---------------------------------------------------------------------------
+// COMPOSING THE PLAN
+//
+// `developmentPlan` above derives a plan from the taps. That is a good draft
+// and a poor final word: it can only ever suggest the remedies attached to the
+// concerns the principal happened to tick, and it hands them a fixed list of
+// four with no say in it.
+//
+// The principal was in the room. They know that this teacher has been told
+// about wait time twice already, that the real problem is the seating, that the
+// factual slip was a one-off. So the machine's job here is to lay out a shelf —
+// the remedies for what was actually seen, PLUS the wider pool for every
+// criterion that lost marks — and let the principal pick from it, drop what
+// does not apply, reorder it, and add whatever they would have written by hand.
+//
+// What gets filed is what they composed, not what the arithmetic proposed.
+// ---------------------------------------------------------------------------
+
+export interface PlanSuggestion {
+  criterionId: string;
+  criterion: string;
+  /** The action itself. Unique across the returned list. */
+  action: string;
+  /** Marks lost on that criterion — why this is ranked where it is. */
+  lost: number;
+  max: number;
+  /** Labels of what was seen that prompted it. Empty for pool suggestions. */
+  observed: string[];
+  /**
+   * observed  — the remedy attached to a concern the principal actually ticked.
+   * suggested — from the criterion's wider pool, offered because it lost marks.
+   */
+  source: "observed" | "suggested";
+}
+
+/**
+ * Everything worth offering, best first.
+ *
+ * Ranked by MARKS LOST rather than by criterion order, because a principal
+ * scanning a list takes the top of it. A pool suggestion against a criterion
+ * that lost eight marks matters more than an observed one against a criterion
+ * that lost two, so marks lost wins the sort and the source only breaks ties.
+ */
+export function planSuggestions(r: Rubric, answers: Answers): PlanSuggestion[] {
+  const found: PlanSuggestion[] = [];
+  const seen = new Map<string, PlanSuggestion>();
+
+  const add = (s: PlanSuggestion) => {
+    const already = seen.get(s.action);
+    if (already) {
+      // The same remedy can be prompted twice — by a ticked concern and again
+      // by the pool, or by two different criteria. Say it once, and keep the
+      // stronger provenance.
+      for (const o of s.observed) if (!already.observed.includes(o)) already.observed.push(o);
+      if (s.source === "observed") already.source = "observed";
+      if (s.lost > already.lost) already.lost = s.lost;
+      return;
+    }
+    seen.set(s.action, s);
+    found.push(s);
+  };
+
+  for (const c of r.criteria) {
+    const a = answers[c.id];
+    if (!a) continue;
+    const max = a.max ?? c.max;
+    const lost = Math.max(0, max - clamp(a.score, max));
+
+    for (const o of c.options) {
+      if (!a.selected.includes(o.id) || o.tone !== "negative" || !o.action) continue;
+      add({
+        criterionId: c.id, criterion: c.name, action: o.action,
+        lost, max, observed: [o.label], source: "observed",
+      });
+    }
+
+    // The wider pool, offered only where there is something to gain. A
+    // criterion at full marks needs no advice attached to it.
+    if (lost > 0) {
+      for (const g of c.growth) {
+        add({
+          criterionId: c.id, criterion: c.name, action: g,
+          lost, max, observed: [], source: "suggested",
+        });
+      }
+    }
+  }
+
+  const rank = (s: PlanSuggestion) => (s.source === "observed" ? 0 : 1);
+  return found.sort((x, y) => y.lost - x.lost || rank(x) - rank(y) || y.max - x.max);
+}
+
+/**
+ * One line of the filed plan.
+ *
+ * `source` is kept so the report can say where each line came from. A line the
+ * principal wrote themselves carries more weight with the teacher than one the
+ * system proposed, and hiding the difference would be a small dishonesty.
+ */
+export interface PlanItem {
+  text: string;
+  /** Which criterion it answers. Absent on a line the principal wrote. */
+  criterion?: string;
+  source: "observed" | "suggested" | "written";
+}
+
+export type Plan = PlanItem[];
+
+/**
+ * Caps. A plan of twelve items is not a plan, it is a complaint — and the
+ * teacher will act on none of it. Eight is already generous; four is a term's
+ * work, which is why that is what gets pre-ticked.
+ */
+export const PLAN_MAX_ITEMS = 8;
+export const PLAN_MAX_LEN = 300;
+
+/**
+ * What the plan starts as before the principal touches it.
+ *
+ * Only the remedies for what was ACTUALLY OBSERVED are pre-ticked. Pool
+ * suggestions are offered but never pre-selected: putting words in the
+ * principal's mouth about something they did not tick would be the system
+ * making the judgement, which is precisely what it must not do.
+ */
+export function defaultPlan(r: Rubric, answers: Answers, limit = 4): Plan {
+  return planSuggestions(r, answers)
+    .filter((s) => s.source === "observed")
+    .slice(0, limit)
+    .map((s) => ({ text: s.action, criterion: s.criterion, source: "observed" as const }));
+}
+
+/**
+ * Accept a plan from anywhere — the browser, an older record, a hand edit —
+ * and return something safe to file.
+ *
+ * Used on the server on every save, because the browser is not trusted, and on
+ * the report, because a record written before this column existed has none.
+ */
+export function normalisePlan(raw: unknown): Plan {
+  if (!Array.isArray(raw)) return [];
+  const out: Plan = [];
+  const seen = new Set<string>();
+
+  for (const item of raw) {
+    if (out.length >= PLAN_MAX_ITEMS) break;
+    const o = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const text = typeof o.text === "string" ? o.text.trim().replace(/\s+/g, " ").slice(0, PLAN_MAX_LEN) : "";
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const raw_source = typeof o.source === "string" ? o.source : "";
+    const source: PlanItem["source"] =
+      raw_source === "observed" || raw_source === "suggested" ? raw_source : "written";
+    const criterion = typeof o.criterion === "string" && o.criterion.trim()
+      ? o.criterion.trim().slice(0, 80) : undefined;
+    out.push({ text, source, ...(criterion ? { criterion } : {}) });
+  }
+  return out;
+}
+
+/** Plain-text form, one action per line — how an amendment edits it. */
+export function planToText(plan: Plan): string {
+  return plan.map((p) => p.text).join("\n");
+}
+
+/** The reverse. Lines a principal typed are their own, so they file as `written`. */
+export function planFromText(text: string): Plan {
+  return normalisePlan(
+    text.split("\n").map((l) => l.trim()).filter(Boolean)
+      .map((t) => ({ text: t, source: "written" })),
+  );
 }
