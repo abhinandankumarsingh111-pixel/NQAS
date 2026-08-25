@@ -4,7 +4,8 @@ import { createClient, getProfile } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { RUBRICS, type RubricId, rubricTotal } from "@/lib/observation-rubrics";
 import {
-  type Answers, totalsFor, summarise, suggestedScore,
+  type Answers, type Plan, totalsFor, summarise, suggestedScore,
+  normalisePlan, planFromText,
 } from "@/lib/observation-scoring";
 
 // ============================================================
@@ -70,6 +71,17 @@ function sanitise(kind: Kind, raw: unknown): Answers {
     clean[c.id] = { selected, auto, score, max: c.max, ...(remark ? { remark } : {}) };
   }
   return clean;
+}
+
+/**
+ * The plan the principal composed, made safe to file.
+ *
+ * The same gate the browser uses, run again here because the browser is not
+ * trusted with a permanent personnel record. Caps the count, caps the length,
+ * drops blanks and repeats.
+ */
+function sanitisePlan(raw: unknown): Plan {
+  return normalisePlan(raw);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,7 +155,7 @@ export async function startDemoAction(input: {
 // it must never interrupt, and it must never block the Next button.
 // ---------------------------------------------------------------------------
 export async function saveProgressAction(
-  kind: Kind, id: string, answers: unknown,
+  kind: Kind, id: string, answers: unknown, plan?: unknown,
 ): Promise<{ ok: boolean; error?: string }> {
   const auth = await requirePrincipal();
   if ("error" in auth) return { ok: false, error: auth.error };
@@ -153,7 +165,10 @@ export async function saveProgressAction(
 
   const supabase = createClient();
   const { error } = await supabase.from(TABLE[kind])
-    .update({ answers: clean, earned: t.earned, max_marks: t.max, pct: t.pct, grade: t.grade })
+    .update({
+      answers: clean, earned: t.earned, max_marks: t.max, pct: t.pct, grade: t.grade,
+      plan: sanitisePlan(plan),
+    })
     .eq("id", id)
     .eq("campus_id", auth.profile.campus_id)
     .eq("status", "draft");
@@ -170,7 +185,7 @@ export async function submitObservationAction(
   kind: Kind, id: string,
   extra: {
     answers: unknown; finalRemark?: string; followUp?: string;
-    recommendation?: string; visibleToManagement?: boolean;
+    recommendation?: string; visibleToManagement?: boolean; plan?: unknown;
   },
 ): Promise<{ ok: boolean; error?: string }> {
   const auth = await requirePrincipal();
@@ -191,6 +206,10 @@ export async function submitObservationAction(
   const row: Record<string, unknown> = {
     answers: clean,
     earned: t.earned, max_marks: t.max, pct: t.pct, grade: t.grade,
+    // What the principal actually composed, not what the arithmetic proposed.
+    // Stored rather than re-derived, so retuning the rubric next year cannot
+    // rewrite the advice a teacher was given this year.
+    plan: sanitisePlan(extra.plan),
     strengths: s.strengths || null,
     improvements: s.improvements || null,
     final_remark: extra.finalRemark?.trim() || null,
@@ -240,6 +259,10 @@ const AMENDABLE = new Set([
   // amendment, because who could see what, and from when, is exactly the kind
   // of question that gets asked a year later.
   "visible_to_management",
+  // The plan is the one part of an observation that SHOULD change afterwards:
+  // the teacher does the thing, or it turns out not to apply, or the two of
+  // them agree on something better in the follow-up conversation.
+  "plan",
 ]);
 
 export async function amendObservationAction(
@@ -250,10 +273,18 @@ export async function amendObservationAction(
   if (!AMENDABLE.has(field)) return { ok: false, error: "That part of the record cannot be amended." };
   if (!reason.trim()) return { ok: false, error: "Give a reason — it is recorded with the change." };
 
+  // The plan is edited as plain lines — one action per line — because that is
+  // how a principal thinks about it. Lines typed at this point are the
+  // principal's own words, so they file as `written` and lose the criterion
+  // attribution the composer gave them; that is honest rather than lossy.
+  const payload = field === "plan"
+    ? JSON.stringify(planFromText(value))
+    : (value.trim() || null);
+
   const supabase = createClient();
   const { error } = await supabase.rpc("amend_observation", {
     p_id: id, p_kind: kind, p_field: field,
-    p_new_value: value.trim() || null, p_reason: reason.trim(),
+    p_new_value: payload, p_reason: reason.trim(),
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath(`/observe/report/${kind}/${id}`);

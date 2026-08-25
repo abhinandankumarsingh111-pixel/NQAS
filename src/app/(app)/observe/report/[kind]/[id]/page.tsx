@@ -5,10 +5,11 @@ import PrintButton from "@/components/PrintButton";
 import AmendForm from "@/components/AmendForm";
 import ObservationControls from "@/components/ObservationControls";
 import {
-  RUBRICS, FOLLOW_UP_LABEL, RECOMMENDATION_LABEL, rubricTotal, type RubricId,
+  RUBRICS, FOLLOW_UP_LABEL, RECOMMENDATION_LABEL, PLAN_LABEL, PLAN_LEAD,
+  rubricTotal, type RubricId,
 } from "@/lib/observation-rubrics";
 import {
-  scoreRows, GRADE_COLOR, developmentPlan, strengthsList,
+  scoreRows, GRADE_COLOR, developmentPlan, strengthsList, normalisePlan, planToText,
   concernCriteria, criterionName, type Answers,
 } from "@/lib/observation-scoring";
 
@@ -53,8 +54,14 @@ export default async function ObservationReport({ params }: { params: { kind: st
 
   const answers = (o.answers || {}) as Answers;
   const rows = scoreRows(rubric, answers);
-  const plan = developmentPlan(rubric, answers);
   const keep = strengthsList(rubric, answers);
+
+  // What the principal actually composed. Records filed before the composer
+  // existed carry none, so those fall back to the derived plan — which is what
+  // was shown at the time, so nothing shifts under a reader who saw it before.
+  const filed = normalisePlan(o.plan);
+  const derived = filed.length ? [] : developmentPlan(rubric, answers);
+  const hasPlan = filed.length > 0 || derived.length > 0;
 
   // A weakness flagged three times running is a different conversation from one
   // flagged once, and the system should be the thing that remembers.
@@ -154,6 +161,11 @@ export default async function ObservationReport({ params }: { params: { kind: st
                   <tr key={r.id} style={{ background: i % 2 ? "#fafaf7" : "#fff" }}>
                     <td>
                       {r.name}
+                      {r.retired && (
+                        <div style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 2 }}>
+                          scored under the earlier rubric &middot; no longer asked
+                        </div>
+                      )}
                       {r.edited && (
                         <div style={{ fontSize: 10.5, color: "var(--orange)", fontWeight: 700, marginTop: 2 }}>
                           principal&rsquo;s score &middot; system suggested {r.auto}
@@ -211,26 +223,41 @@ export default async function ObservationReport({ params }: { params: { kind: st
             </>
           )}
 
-          {plan.length > 0 && (
+          {hasPlan && (
             <>
-              <h3>Development plan</h3>
+              <h3>{PLAN_LABEL[kind]}</h3>
               <p className="muted" style={{ fontSize: 12, margin: "0 0 9px" }}>
-                Most important first, by the marks each cost.
+                {filed.length
+                  ? `${PLAN_LEAD[kind]} In the order the observer set.`
+                  : `${PLAN_LEAD[kind]} Most important first, by the marks each cost.`}
               </p>
               <ol style={{ margin: "0 0 13px", paddingLeft: 20 }}>
-                {plan.map((a) => (
-                  <li key={a.action} style={{ marginBottom: 8 }}>
-                    {a.action.charAt(0).toUpperCase() + a.action.slice(1)}.
-                    <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
-                      {a.criterion} &middot; {a.lost} of {a.max} marks &middot; {a.observed.join(", ").toLowerCase()}
-                    </div>
-                  </li>
-                ))}
+                {filed.length
+                  ? filed.map((a) => (
+                      <li key={a.text} style={{ marginBottom: 8 }}>
+                        {a.text.charAt(0).toUpperCase() + a.text.slice(1)}.
+                        {(a.criterion || a.source === "written") && (
+                          <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                            {a.source === "written"
+                              ? `${isDemo ? "Panel" : "Observer"}’s own note`
+                              : a.criterion}
+                          </div>
+                        )}
+                      </li>
+                    ))
+                  : derived.map((a) => (
+                      <li key={a.action} style={{ marginBottom: 8 }}>
+                        {a.action.charAt(0).toUpperCase() + a.action.slice(1)}.
+                        <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                          {a.criterion} &middot; {a.lost} of {a.max} marks &middot; {a.observed.join(", ").toLowerCase()}
+                        </div>
+                      </li>
+                    ))}
               </ol>
             </>
           )}
 
-          {o.improvements && !plan.length && (
+          {o.improvements && !hasPlan && (
             <><h3>Areas for Improvement</h3><p style={{ margin: "0 0 13px" }}>{o.improvements}</p></>
           )}
 
@@ -271,8 +298,8 @@ export default async function ObservationReport({ params }: { params: { kind: st
                 <b>{a.field.replace(/_/g, " ")}</b>
                 <span className="muted" style={{ fontSize: 12 }}> — {a.changed_by_name}</span>
                 <div style={{ fontSize: 13, marginTop: 4 }}>
-                  <div style={{ color: "var(--sub)", textDecoration: "line-through" }}>{a.old_value || "(empty)"}</div>
-                  <div style={{ color: "var(--navy)" }}>{a.new_value || "(empty)"}</div>
+                  <div style={{ color: "var(--sub)", textDecoration: "line-through", whiteSpace: "pre-wrap" }}>{a.old_value || "(empty)"}</div>
+                  <div style={{ color: "var(--navy)", whiteSpace: "pre-wrap" }}>{a.new_value || "(empty)"}</div>
                 </div>
                 {a.reason && (
                   <div style={{ fontSize: 12, marginTop: 4, fontStyle: "italic", color: "var(--sub)" }}>
@@ -302,6 +329,7 @@ export default async function ObservationReport({ params }: { params: { kind: st
             recommendation: o.recommendation || "consider",
             strengths: o.strengths || "",
             improvements: o.improvements || "",
+            plan: planToText(filed),
           }} />
       )}
     </div>

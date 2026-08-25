@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  RUBRICS, FOLLOW_UP, RECOMMENDATION, type RubricId,
+  RUBRICS, FOLLOW_UP, RECOMMENDATION, PLAN_LABEL, PLAN_LEAD, type RubricId,
 } from "@/lib/observation-rubrics";
 import {
-  type Answers, answerFor, totalsFor, scoreRows, GRADE_COLOR,
-  developmentPlan, strengthsList,
+  type Answers, type Plan, type PlanSuggestion, answerFor, totalsFor, scoreRows,
+  GRADE_COLOR, planSuggestions, defaultPlan, strengthsList,
+  PLAN_MAX_ITEMS, PLAN_MAX_LEN,
 } from "@/lib/observation-scoring";
 import { saveProgressAction, submitObservationAction } from "@/actions/observations";
 
@@ -36,6 +37,14 @@ export default function ObservationRunner({
   const [remarkOpen, setRemarkOpen] = useState(false);
   const [finalRemark, setFinalRemark] = useState("");
   const [outcome, setOutcome] = useState(kind === "in_campus" ? "none" : "consider");
+  // The plan the principal composes. Proposed from what they actually ticked,
+  // then entirely theirs: add, drop, reorder, or write their own.
+  const [plan, setPlan] = useState<Plan>([]);
+  // Once they have touched it the machine stops proposing. A principal who
+  // deliberately empties the plan must not find it refilled a tap later.
+  const [planTouched, setPlanTouched] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [written, setWritten] = useState("");
   // Private by default. Sharing upward is a decision, not a default.
   const [share, setShare] = useState(false);
   const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
@@ -56,26 +65,36 @@ export default function ObservationRunner({
         if (typeof d.finalRemark === "string") setFinalRemark(d.finalRemark);
         if (typeof d.outcome === "string") setOutcome(d.outcome);
         if (typeof d.share === "boolean") setShare(d.share);
+        if (Array.isArray(d.plan)) setPlan(d.plan);
+        if (typeof d.planTouched === "boolean") setPlanTouched(d.planTouched);
       }
     } catch { /* private mode, cleared storage — the server draft still stands */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirrored into refs so `persist` keeps one stable signature however many
+  // things the review screen grows. Everything that changes them calls persist
+  // on the same tick, so the ref is always current by the time it is read.
   const shareRef = useRef(false);
   shareRef.current = share;
+  const planRef = useRef<Plan>([]);
+  planRef.current = plan;
+  const touchedRef = useRef(false);
+  touchedRef.current = planTouched;
+
   const persist = useCallback((next: Answers, nextStep: number, remark: string, out: string) => {
     try {
       localStorage.setItem(storeKey, JSON.stringify({
         answers: next, step: nextStep, finalRemark: remark, outcome: out,
-        share: shareRef.current,
+        share: shareRef.current, plan: planRef.current, planTouched: touchedRef.current,
       }));
     } catch { /* not fatal — the server copy below is the real one */ }
 
     setSaving("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      const res = await saveProgressAction(kind, id, next);
+      const res = await saveProgressAction(kind, id, next, planRef.current);
       setSaving(res.ok ? "saved" : "idle");
     }, 700);
   }, [kind, id, storeKey]);
@@ -84,8 +103,54 @@ export default function ObservationRunner({
   const current = criterion ? answers[criterion.id] : undefined;
   const totals = useMemo(() => totalsFor(rubric, answers), [rubric, answers]);
   const rows = useMemo(() => scoreRows(rubric, answers), [rubric, answers]);
-  const plan = useMemo(() => developmentPlan(rubric, answers), [rubric, answers]);
   const keep = useMemo(() => strengthsList(rubric, answers), [rubric, answers]);
+  const suggestions = useMemo(() => planSuggestions(rubric, answers), [rubric, answers]);
+  const chosen = useMemo(() => new Set(plan.map((p) => p.text)), [plan]);
+  const shelf = useMemo(() => suggestions.filter((s) => !chosen.has(s.action)),
+    [suggestions, chosen]);
+  const planFull = plan.length >= PLAN_MAX_ITEMS;
+
+  // Propose a starting plan the first time they reach Review, and keep it in
+  // step with the scores until they touch it. After that it is theirs, and the
+  // machine does not get another say.
+  useEffect(() => {
+    if (step !== lastStep || planTouched) return;
+    const proposed = defaultPlan(rubric, answers);
+    setPlan((cur) =>
+      cur.length === proposed.length && cur.every((c, i) => c.text === proposed[i].text)
+        ? cur : proposed);
+  }, [step, lastStep, planTouched, rubric, answers]);
+
+  function editPlan(next: Plan) {
+    setPlanTouched(true);
+    touchedRef.current = true;
+    planRef.current = next;
+    setPlan(next);
+    persist(answers, step, finalRemark, outcome);
+  }
+
+  function addSuggestion(s: PlanSuggestion) {
+    if (planFull) return;
+    editPlan([...plan, { text: s.action, criterion: s.criterion, source: s.source }]);
+  }
+
+  function addWritten() {
+    const text = written.trim().replace(/\s+/g, " ").slice(0, PLAN_MAX_LEN);
+    if (!text || planFull) return;
+    if (plan.some((p) => p.text.toLowerCase() === text.toLowerCase())) {
+      setWritten(""); setWriting(false); return;
+    }
+    editPlan([...plan, { text, source: "written" }]);
+    setWritten(""); setWriting(false);
+  }
+
+  function movePlan(i: number, by: number) {
+    const to = i + by;
+    if (to < 0 || to >= plan.length) return;
+    const next = [...plan];
+    [next[i], next[to]] = [next[to], next[i]];
+    editPlan(next);
+  }
 
   function tap(optionId: string) {
     if (!criterion) return;
@@ -128,6 +193,7 @@ export default function ObservationRunner({
     const res = await submitObservationAction(kind, id, {
       answers,
       finalRemark,
+      plan,
       visibleToManagement: share,
       ...(kind === "in_campus" ? { followUp: outcome } : { recommendation: outcome }),
     });
@@ -233,7 +299,7 @@ export default function ObservationRunner({
           <p className="obs-prompt">Tap any score to change it. The total updates as you go.</p>
 
           <div className="obs-review">
-            {rows.map((r, i) => (
+            {rows.filter((r) => !r.retired).map((r, i) => (
               <button key={r.id} type="button" className="obs-rrow" onClick={() => go(i)}>
                 <span className="obs-rname">
                   {r.name}
@@ -269,26 +335,100 @@ export default function ObservationRunner({
             </div>
           )}
 
-          {/* Ranked by marks lost, not by criterion order. A teacher who reads
-              four suggestions acts on the first, so the first must be the one
-              that matters most. */}
-          {plan.length > 0 && (
-            <div className="obs-plan">
-              <div className="obs-plan-h">Development plan &mdash; most important first</div>
-              {plan.map((a, i) => (
-                <div key={a.action} className="obs-plan-row">
-                  <span className="obs-plan-n">{i + 1}</span>
-                  <span>
-                    <b>{a.action.charAt(0).toUpperCase() + a.action.slice(1)}.</b>
-                    <em>{a.criterion} &middot; {a.lost} of {a.max} marks &middot; {a.observed.join(", ").toLowerCase()}</em>
-                  </span>
+          {/* THE PLAN COMPOSER.
+              The system proposes; the principal decides. What is pre-ticked is
+              only what they actually observed. Everything else is a shelf to
+              pick from, and they can write their own lines besides.
+
+              Order matters and is theirs to set: whoever reads a numbered list
+              acts on the first item, so the first item must be the one this
+              principal thinks matters most — not the one that lost most marks. */}
+          <div className="obs-plan">
+            <div className="obs-plan-h">{PLAN_LABEL[kind]}</div>
+            <p className="obs-plan-lead">
+              {PLAN_LEAD[kind]} Pre-ticked from what you recorded &mdash; add, remove,
+              reorder, or write your own.
+            </p>
+
+            {plan.length > 0 ? (
+              <ol className="obs-plan-list">
+                {plan.map((a, i) => (
+                  <li key={a.text} className="obs-plan-row">
+                    <span className="obs-plan-n">{i + 1}</span>
+                    <span className="obs-plan-txt">
+                      <b>{a.text.charAt(0).toUpperCase() + a.text.slice(1)}.</b>
+                      <em>{a.source === "written" ? "your own words" : a.criterion || ""}</em>
+                    </span>
+                    <span className="obs-plan-btns">
+                      <button type="button" onClick={() => movePlan(i, -1)}
+                        disabled={i === 0} aria-label="Move up">↑</button>
+                      <button type="button" onClick={() => movePlan(i, 1)}
+                        disabled={i === plan.length - 1} aria-label="Move down">↓</button>
+                      <button type="button" className="obs-plan-x"
+                        onClick={() => editPlan(plan.filter((_, n) => n !== i))}
+                        aria-label={`Remove: ${a.text}`}>×</button>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="obs-plan-empty">
+                Nothing here yet. Tap a suggestion below, or write your own.
+              </div>
+            )}
+
+            {planFull && (
+              <div className="obs-plan-note">
+                That is {PLAN_MAX_ITEMS} &mdash; enough. Remove one to add another.
+                A list longer than this gets filed, not acted on.
+              </div>
+            )}
+
+            {shelf.length > 0 && !planFull && (
+              <>
+                <div className="obs-plan-sh">
+                  Suggestions <span>({shelf.length}) &middot; heaviest loss first</span>
                 </div>
-              ))}
-              <span className="obs-plan-note">
-                Written from your selections. You can edit the wording after submitting.
-              </span>
-            </div>
-          )}
+                <div className="obs-plan-shelf">
+                  {shelf.map((s) => (
+                    <button key={s.action} type="button"
+                      className={`obs-sug ${s.source === "observed" ? "seen" : ""}`}
+                      onClick={() => addSuggestion(s)}>
+                      <span className="obs-sug-plus" aria-hidden="true">+</span>
+                      <span>
+                        {s.action.charAt(0).toUpperCase() + s.action.slice(1)}
+                        <em>
+                          {s.criterion} &middot; {s.lost} of {s.max} marks
+                          {s.observed.length ? ` · you saw: ${s.observed.join(", ").toLowerCase()}` : ""}
+                        </em>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {!planFull && (writing ? (
+              <div className="obs-plan-write">
+                <textarea className="obs-remark" rows={2} value={written} autoFocus
+                  maxLength={PLAN_MAX_LEN}
+                  placeholder={kind === "in_campus"
+                    ? "One thing to do differently, in your words"
+                    : "One thing to check or ask before deciding"}
+                  onChange={(e) => setWritten(e.target.value)} />
+                <div className="obs-plan-writebtns">
+                  <button type="button" className="btn btn-accent btn-sm"
+                    disabled={!written.trim()} onClick={addWritten}>Add to plan</button>
+                  <button type="button" className="btn btn-ghost btn-sm"
+                    onClick={() => { setWriting(false); setWritten(""); }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="obs-addremark" onClick={() => setWriting(true)}>
+                + Write your own
+              </button>
+            ))}
+          </div>
 
           <label className="obs-label">
             {kind === "in_campus" ? "Follow-up" : "Recommendation"}

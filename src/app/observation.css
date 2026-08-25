@@ -256,27 +256,88 @@
 }
 .obs-hscore { flex: 0 0 auto; font-size: 13px; color: var(--sub); font-weight: 600; }
 
-/* ---- development plan: the part the teacher actually acts on ---- */
+/* ---- the plan composer: the part that actually gets acted on ---- */
 .obs-plan {
   margin-top: 14px; padding: 13px 15px; border-radius: 9px;
   background: #fff; border: 1.5px solid var(--teal);
 }
 .obs-plan-h {
   font-size: 11.5px; font-weight: 700; letter-spacing: .4px;
-  text-transform: uppercase; color: var(--teal); margin-bottom: 10px;
+  text-transform: uppercase; color: var(--teal); margin-bottom: 4px;
 }
-.obs-plan-row { display: flex; gap: 11px; align-items: flex-start; margin-bottom: 11px; }
+.obs-plan-lead { font-size: 12.5px; color: var(--sub); line-height: 1.5; margin: 0 0 11px; }
+
+.obs-plan-list { list-style: none; margin: 0 0 11px; padding: 0; }
+.obs-plan-row {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 9px 0; border-bottom: 1px solid var(--line);
+}
+.obs-plan-row:last-child { border-bottom: none; }
 .obs-plan-n {
   flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
   background: var(--navy); color: #fff; display: grid; place-items: center;
-  font-size: 12.5px; font-weight: 700;
+  font-size: 12.5px; font-weight: 700; margin-top: 1px;
 }
-.obs-plan-row b { display: block; font-size: 14.5px; color: var(--ink); line-height: 1.45; font-weight: 600; }
-.obs-plan-row em {
+.obs-plan-txt { flex: 1; min-width: 0; }
+.obs-plan-txt b { display: block; font-size: 14.5px; color: var(--ink); line-height: 1.45; font-weight: 600; }
+.obs-plan-txt em {
   display: block; font-style: normal; font-size: 11.5px;
   color: var(--sub); margin-top: 2px;
 }
-.obs-plan-note { font-size: 11px; color: var(--sub); font-style: italic; }
+/* Reorder and remove. Visually small, but never below the 44px a thumb needs. */
+.obs-plan-btns { flex: 0 0 auto; display: flex; gap: 2px; }
+.obs-plan-btns button {
+  width: 34px; min-height: 44px; border: none; background: none; cursor: pointer;
+  color: var(--sub); font-size: 17px; line-height: 1; border-radius: 6px;
+  font-family: var(--font-ui);
+}
+.obs-plan-btns button:active { background: var(--paper); }
+.obs-plan-btns button:disabled { opacity: .25; cursor: default; }
+.obs-plan-btns .obs-plan-x { color: var(--red); font-size: 21px; }
+
+.obs-plan-empty {
+  font-size: 13px; color: var(--sub); font-style: italic;
+  padding: 12px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 11px;
+}
+.obs-plan-note {
+  display: block; font-size: 11.5px; color: var(--sub);
+  font-style: italic; line-height: 1.5; margin-bottom: 10px;
+}
+
+.obs-plan-sh {
+  font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--sub); margin: 4px 0 8px;
+}
+.obs-plan-sh span { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.obs-plan-shelf {
+  display: flex; flex-direction: column; gap: 7px;
+  max-height: 340px; overflow-y: auto; margin-bottom: 11px;
+  -webkit-overflow-scrolling: touch;
+}
+.obs-sug {
+  display: flex; gap: 10px; align-items: flex-start; width: 100%; text-align: left;
+  min-height: 52px; padding: 10px 12px; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  font-family: var(--font-body); font-size: 13.5px; color: var(--ink); line-height: 1.45;
+}
+.obs-sug:active { background: var(--paper); }
+/* A remedy for something the principal actually ticked reads differently from
+   one offered because the criterion merely lost marks. Showing which is which
+   keeps the principal in charge of the difference. */
+.obs-sug.seen { border-color: var(--teal); background: var(--chip); }
+.obs-sug-plus {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--paper); border: 1px solid var(--line); color: var(--navy);
+  display: grid; place-items: center; font-size: 15px; font-weight: 700; margin-top: 1px;
+}
+.obs-sug.seen .obs-sug-plus { background: var(--teal); border-color: var(--teal); color: #fff; }
+.obs-sug em {
+  display: block; font-style: normal; font-size: 11px;
+  color: var(--sub); margin-top: 3px;
+}
+
+.obs-plan-write { margin-top: 4px; }
+.obs-plan-writebtns { display: flex; gap: 8px; margin-top: 8px; }
 
 /* ---- sharing toggle ---- */
 .obs-share {
