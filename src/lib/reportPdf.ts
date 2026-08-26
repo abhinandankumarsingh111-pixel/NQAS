@@ -46,7 +46,7 @@ export interface PdfReport {
 const M = 48;                    // page margin
 const COL = [130, 52, 128, 0];   // Student, Days, Status, Observations (last = remainder)
 
-export function buildReportPdf(r: PdfReport): Uint8Array {
+export function buildReportPdf(r: PdfReport): ArrayBuffer {
   const pdf = new Pdf();
   const contentW = pdf.width - M * 2;
   COL[3] = contentW - COL[0] - COL[1] - COL[2];
