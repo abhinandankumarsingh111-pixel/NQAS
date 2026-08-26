@@ -55,10 +55,19 @@ export interface TeacherMetrics {
   timelinessPct: Record<DayStatus, number>;
   /** Share of notebooks at Delayed or Critical. */
   behindPct: number | null;
+  /** Notebooks at Delayed or Critical. Raw count backing behindPct. */
+  behindCount: number;
+  /** Notebooks with a day status computed at all — the denominator behind
+   *  behindPct and behindCount. (Undated notebooks are excluded — rule 4.) */
+  bandedCount: number;
   /** Median days, per class band. Never merged across bands — see rule 3. */
   medianDaysByBand: Partial<Record<ClassBand, number>>;
   /** Share of notebooks carrying >= 1 teacher-attributable negative. */
   faultRate: number | null;
+  /** Notebooks carrying >= 1 teacher-attributable negative. Raw count behind faultRate. */
+  faultyCount: number;
+  /** Notebooks with observation ids recorded — the denominator behind faultRate. */
+  scoredCount: number;
   criticalCount: number;
   /** Distinct coordinators. One coordinator throughout is weaker evidence. */
   coordinators: number;
@@ -149,8 +158,12 @@ export function teacherMetrics(reports: MetricReport[]): TeacherMetrics {
     timeliness,
     timelinessPct,
     behindPct: banded ? pct(timeliness.Delayed + timeliness.Critical, banded) : null,
+    behindCount: timeliness.Delayed + timeliness.Critical,
+    bandedCount: banded,
     medianDaysByBand,
     faultRate: scored ? pct(faulty, scored) : null,
+    faultyCount: faulty,
+    scoredCount: scored,
     criticalCount: critical,
     coordinators: coordinators.size,
     unscored,
@@ -181,3 +194,61 @@ export const SAMPLING_LABEL: Record<string, string> = {
   spot: "Spot check",
   teacher_provided: "Teacher-provided",
 };
+
+// ---------------------------------------------------------------------------
+// PRESENTATION: plain-language tiers and a rate-suppression floor.
+//
+// Two real-world precedents, both applied here:
+//
+//  - New Jersey's school performance reports don't shrink a rate below a
+//    minimum sample size, they SUPPRESS it — an asterisk stands in for the
+//    number, because a caveat printed next to a percentage doesn't stop a
+//    skimming reader from treating the percentage as the verdict. Below
+//    RATE_SUPPRESSED_BELOW, the UI must show a raw count ("2 of 3"), not a
+//    computed percentage.
+//  - England's redesigned Ofsted report cards lead each area with a
+//    plain-language tier ("Strong standard", "Needs attention"...) and treat
+//    the number as supporting detail underneath, not the headline. At and
+//    above the floor, behindTier()/qualityTier() are that headline.
+//
+// Both read off the SAME underlying percentage math already computed above;
+// nothing here changes what counts, only how it is presented.
+// ---------------------------------------------------------------------------
+
+/** Below this many notebooks in the relevant denominator, a rate is not
+ *  computed at all for display — the same floor that already marks a
+ *  teacher's whole record "provisional". */
+export const RATE_SUPPRESSED_BELOW = PROVISIONAL_BELOW;
+
+const BEHIND_TIERS: [number, string][] = [
+  [0, "None behind schedule"],
+  [15, "Mostly on time"],
+  [40, "Some behind schedule"],
+  [70, "Often behind schedule"],
+  [Infinity, "Mostly behind schedule"],
+];
+
+const QUALITY_TIERS: [number, string][] = [
+  [0, "No quality concerns"],
+  [15, "Occasional concern"],
+  [40, "Recurring concern"],
+  [Infinity, "Frequent concern"],
+];
+
+function tierLabel(pct: number, tiers: [number, string][]): string {
+  for (const [ceiling, label] of tiers) if (pct <= ceiling) return label;
+  return tiers[tiers.length - 1][1];
+}
+
+/** Plain-language reading of the "notebooks behind" rate. Only meaningful
+ *  once bandedCount >= RATE_SUPPRESSED_BELOW — callers must check the floor
+ *  themselves, the same way they already check behindPct for null. */
+export function behindTier(pct: number): string {
+  return tierLabel(pct, BEHIND_TIERS);
+}
+
+/** Plain-language reading of the checking-quality flag rate. Same caveat:
+ *  only meaningful once scoredCount >= RATE_SUPPRESSED_BELOW. */
+export function qualityTier(pct: number): string {
+  return tierLabel(pct, QUALITY_TIERS);
+}

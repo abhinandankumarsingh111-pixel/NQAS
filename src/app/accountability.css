@@ -43,6 +43,10 @@
 .fig { border: 1px solid var(--line-soft); border-left: 3px solid var(--gold); border-radius: 8px; padding: 10px 12px; background: var(--paper); }
 .fig-n { font-family: var(--font-ui); font-size: 23px; font-weight: 700; color: var(--navy); line-height: 1.1; }
 .fig-n small { font-size: 13px; font-weight: 600; }
+/* A plain-language tier ("Mostly on time") leading a tile instead of a raw
+   number — sized down from .fig-n so a short phrase reads as a headline
+   rather than wrapping awkwardly at 150px tile width. */
+.fig-n-tier { font-size: 16px; line-height: 1.25; }
 .fig-l { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--sub); margin-top: 3px; }
 .fig-b { font-size: 11.5px; color: var(--sub); margin-top: 4px; line-height: 1.45; }
 
