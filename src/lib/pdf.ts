@@ -154,8 +154,15 @@ export class Pdf {
       `${num(x1)} ${num(y1)} m ${num(x2)} ${num(y2)} l S`);
   }
 
-  /** Serialise to PDF bytes. */
-  build(): Uint8Array {
+  /**
+   * Serialise to PDF bytes.
+   *
+   * Returns an ArrayBuffer rather than a Uint8Array on purpose. A Uint8Array is
+   * typed over ArrayBufferLike, which includes SharedArrayBuffer, and so is not
+   * accepted as a response body without a cast. Handing back the buffer itself
+   * keeps the call sites honest and cast-free.
+   */
+  build(): ArrayBuffer {
     const contents = [...this.pages, this.cur.join("\n")];
     const pageCount = contents.length;
 
@@ -193,8 +200,9 @@ export class Pdf {
     for (const off of offsets) out += `${String(off).padStart(10, "0")} 00000 n \n`;
     out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`;
 
-    const bytes = new Uint8Array(out.length);
-    for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 0xff;
-    return bytes;
+    const buf = new ArrayBuffer(out.length);
+    const view = new Uint8Array(buf);
+    for (let i = 0; i < out.length; i++) view[i] = out.charCodeAt(i) & 0xff;
+    return buf;
   }
 }

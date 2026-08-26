@@ -51,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   };
 
   const bytes = buildReportPdf(report);
-  return new Response(new Blob([bytes], { type: "application/pdf" }), {
+  return new Response(bytes, {
     headers: {
       "Content-Type": "application/pdf",
       // "inline" so a phone can preview it before sending rather than dropping
