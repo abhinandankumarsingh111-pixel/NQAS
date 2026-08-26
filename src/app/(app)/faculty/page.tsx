@@ -4,6 +4,7 @@ import { getProfile, createClient } from "@/lib/supabase/server";
 import { teacherMetrics, PROVISIONAL_BELOW, type MetricReport } from "@/lib/metrics";
 import CampusSelect from "@/components/CampusSelect";
 import AddFacultyPanel from "@/components/AddFacultyPanel";
+import FacultyImport from "@/components/FacultyImport";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,18 @@ export default async function FacultyDirectory({
         campusName={campusName(isCampusLocked ? profile.campus_id : selectedCampusId)}
         needsCampusChoice={!isCampusLocked && !selectedCampusId}
       />
+
+      {/* Importing a whole roll creates personnel records in bulk, so it sits
+          with the owner alongside renaming and deleting them — not with the
+          coordinator, who may add one teacher to get through a verification. */}
+      {profile.role === "owner" && (
+        <FacultyImport
+          campusId={isCampusLocked ? profile.campus_id : selectedCampusId}
+          campusName={campusName(isCampusLocked ? profile.campus_id : selectedCampusId)}
+          existingNames={campusFaculty.map((f) => f.name)}
+          needsCampusChoice={!isCampusLocked && !selectedCampusId}
+        />
+      )}
 
       <form method="GET" className="fac-search no-print">
         {selectedCampusId && <input type="hidden" name="campus" value={selectedCampusId} />}
