@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient, getProfile } from "@/lib/supabase/server";
+import { adminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 // ============================================================
@@ -92,30 +93,118 @@ export async function updateFacultyAction(
   return { ok: true };
 }
 
+/** One observation, seen only as "does this hold anything a person wrote?". */
+interface ObsProbe {
+  id: string;
+  status: string | null;
+  earned: number | null;
+  answers: unknown;
+  strengths: string | null;
+  improvements: string | null;
+  final_remark: string | null;
+  topic: string | null;
+  observed_on: string | null;
+  observer_name: string | null;
+}
+
 /**
- * Permanent removal, permitted ONLY where nothing is attached. Anything with a
- * verification or a remark is refused here and again by the database, which
- * holds reports and remarks under ON DELETE RESTRICT — so a personnel record
- * with history cannot be erased even by a mistake in this file.
+ * True when somebody actually recorded something on this observation.
+ *
+ * The start form writes class, subject and topic before the principal has
+ * judged anything, so those are not content — they are the header of a blank
+ * page. Content is a scored answer, a written note, or marks earned.
+ */
+function observationHasContent(o: ObsProbe): boolean {
+  const a = o.answers;
+  const answered = Array.isArray(a)
+    ? a.length > 0
+    : !!a && typeof a === "object" && Object.keys(a as object).length > 0;
+  const written = [o.strengths, o.improvements, o.final_remark]
+    .some((t) => (t || "").trim().length > 0);
+  return answered || written || (o.earned || 0) > 0;
+}
+
+/**
+ * Delete a faculty record.
+ *
+ * THREE tables can legitimately hold a teacher to a record — reports, remarks
+ * and observations — and the database enforces all three with ON DELETE
+ * RESTRICT. This used to check only the first two, so an observation would let
+ * the delete through to the database and surface a raw foreign-key error
+ * ("violates constraint observations_faculty_id_fkey") to a principal who has
+ * no way to act on that sentence. Everything else that points at faculty
+ * cascades, because it belongs to the record rather than being history about
+ * the teacher.
+ *
+ * An EMPTY DRAFT observation is not history. It is what a double-tap on the
+ * start form leaves behind: a header with no judgement in it, filed by nobody.
+ * Refusing to delete a duplicate teacher because an abandoned blank form points
+ * at it is the same mistake in a different place, so those are discarded with
+ * the record and reported. A draft somebody actually wrote in is a different
+ * matter and stops the deletion.
  */
 export async function deleteFacultyAction(facultyId: string): Promise<{ ok: boolean; error?: string }> {
   const auth = await requireOwner();
   if ("error" in auth) return { ok: false, error: auth.error };
 
   const supabase = createClient();
-  const [{ count: reportCount }, { count: remarkCount }] = await Promise.all([
+  const [{ count: reportCount }, { count: remarkCount }, { data: obsRows }] = await Promise.all([
     supabase.from("reports").select("id", { count: "exact", head: true }).eq("faculty_id", facultyId),
     supabase.from("remarks").select("id", { count: "exact", head: true }).eq("faculty_id", facultyId),
+    supabase.from("observations")
+      .select("id, status, earned, answers, strengths, improvements, final_remark, topic, observed_on, observer_name")
+      .eq("faculty_id", facultyId),
   ]);
-  if ((reportCount || 0) > 0 || (remarkCount || 0) > 0) {
+
+  const observations = (obsRows || []) as ObsProbe[];
+  const submitted = observations.filter((o) => o.status === "submitted");
+  const startedDrafts = observations.filter((o) => o.status !== "submitted" && observationHasContent(o));
+  const blankDrafts = observations.filter((o) => o.status !== "submitted" && !observationHasContent(o));
+
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+  // Real history: refuse, and say exactly what is holding the record.
+  const history: string[] = [];
+  if (reportCount) history.push(plural(reportCount, "verification"));
+  if (remarkCount) history.push(plural(remarkCount, "remark"));
+  if (submitted.length) history.push(plural(submitted.length, "class observation"));
+  if (history.length) {
+    const list = history.length === 1 ? history[0]
+      : `${history.slice(0, -1).join(", ")} and ${history[history.length - 1]}`;
     return { ok: false, error:
-      `This teacher has ${reportCount || 0} verification(s) and ${remarkCount || 0} remark(s). ` +
-      "A record with history cannot be deleted — deactivate it instead, or merge it into another record." };
+      `This teacher has ${list} on record, so the record cannot be deleted — that history would go with it. ` +
+      `Use “Mark as left” to take them out of the pickers, or merge this record into the right one.` };
+  }
+
+  // An unfinished observation with something in it is somebody's work.
+  if (startedDrafts.length) {
+    const d = startedDrafts[0];
+    const who = d.observer_name || "a principal";
+    const when = d.observed_on || "an earlier date";
+    return { ok: false, error:
+      `There ${startedDrafts.length === 1 ? "is an unfinished class observation" : `are ${startedDrafts.length} unfinished class observations`} ` +
+      `on this teacher — the first started by ${who} on ${when}. Finish or discard ${startedDrafts.length === 1 ? "it" : "them"} first, ` +
+      `so nobody's work is thrown away with the record.` };
+  }
+
+  // Only blank drafts left. Clear them, then the record.
+  //
+  // Service-role: the owner may READ observations but not delete them, and
+  // deliberately so — deleting a real observation goes through delete_observation(),
+  // which demands a reason and leaves a permanent note behind. There is nothing
+  // to memorialise about a blank form, so no such note is written here.
+  if (blankDrafts.length) {
+    const admin = adminClient();
+    const { error: obsErr } = await admin
+      .from("observations").delete().in("id", blankDrafts.map((o) => o.id));
+    if (obsErr) return { ok: false, error: `Could not clear the blank draft observations: ${obsErr.message}` };
   }
 
   const { error } = await supabase.from("faculty").delete().eq("id", facultyId);
   if (error) return { ok: false, error: error.message };
+
   revalidatePath("/faculty");
+  revalidatePath("/observe");
   return { ok: true };
 }
 
