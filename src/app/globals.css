@@ -6,6 +6,13 @@
   --orange: #E07B1A; --gold: var(--orange); --gold-dk: #A6590E; --gold-soft: #F1C48A;
   --paper: #F7F6F1; --panel: #fff; --ink: #12202C; --sub: #57626F;
   --line: #E4E1D6; --line-soft: #EEEBE0; --chip: #F2F0E6; --red: #A32020;
+  /* A border you have to be able to SEE, as opposed to one that merely
+     separates. WCAG asks 3:1 for the edge of a control or a chart element, and
+     the soft --line above is about 1.3:1 on white — fine for a card seam,
+     not fine for the outline of a bar someone is reading a number off, or for
+     a tap target on a phone held in Indian daylight. Cards keep --line; things
+     you read or press use this. */
+  --line-strong: #97907E;
 
   --grad: linear-gradient(135deg, #0A3F6B 0%, #026874 55%, #2E9E9E 100%);
   --grad-deep: linear-gradient(160deg, #081D30 0%, #0A3F6B 45%, #026874 100%);
@@ -45,7 +52,7 @@ a { color: var(--teal); }
 .label { display: block; font-size: 11.5px; color: var(--sub); font-weight: 600; margin-bottom: 6px; letter-spacing: .3px; text-transform: uppercase; }
 .field { margin-bottom: 14px; }
 .input, select.input {
-  width: 100%; padding: 11px 13px; border: 1.5px solid var(--line);
+  width: 100%; padding: 11px 13px; border: 1.5px solid var(--line-strong);
   border-radius: 10px; font-size: 14px; color: var(--ink); background: #fbfbf7;
   font-family: var(--font-body);
 }
@@ -77,20 +84,31 @@ a { color: var(--teal); }
 
 .band { font-size: 11px; font-weight: 700; color: #fff; border-radius: 10px; padding: 2px 9px; white-space: nowrap; }
 
-.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 .tab {
-  font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer;
-  border: 1px solid var(--line); background: #fff; color: var(--navy); text-decoration: none;
+  font-size: 13px; font-weight: 600; padding: 0 15px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: #fff; color: var(--navy); text-decoration: none;
+  /* These are thumbed on a phone, so they get a real target rather than the
+     7px of padding they had. */
+  min-height: 44px; display: inline-flex; align-items: center;
 }
-.tab.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.tab:hover { border-color: var(--teal2); }
+/* The current section, marked three ways — fill, weight and aria-current — so
+   it survives a greyscale screen and a screen reader alike. */
+.tab.on { background: var(--navy); color: #fff; border-color: var(--navy); font-weight: 700; }
 
 .step { font-size: 11.5px; font-weight: 600; padding: 5px 10px; border-radius: 20px; background: var(--chip); color: var(--sub); }
 .step.on { background: var(--navy); color: #fff; }
 .step.done { background: var(--teal); color: #fff; }
 
 .stat { flex: 1 1 110px; min-width: 110px; background: var(--chip); border-radius: 8px; padding: 10px 12px; border-left: 3px solid var(--gold); }
-.stat b { font-size: 21px; font-weight: 800; color: var(--navy); display: block; font-family: var(--font-ui); }
-.stat span { font-size: 11.5px; color: var(--sub); }
+/* Tabular figures so a column of stat tiles lines up digit for digit instead
+   of drifting with the width of a 1 against a 4. */
+.stat b {
+  font-size: 21px; font-weight: 800; color: var(--navy); display: block;
+  font-family: var(--font-ui); font-variant-numeric: tabular-nums;
+}
+.stat span { font-size: 11.5px; color: var(--sub); line-height: 1.4; display: block; }
 
 /* ---- sitewide letterhead app chrome (topbar / footer) ---- */
 .app-topbar {
