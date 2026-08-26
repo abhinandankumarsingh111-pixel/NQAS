@@ -145,3 +145,36 @@ textarea.input { resize: vertical; line-height: 1.55; font-family: var(--font-bo
   margin-top: 4px; font-size: 10px; font-weight: 600; letter-spacing: .3px;
   color: var(--sub); font-style: italic; white-space: nowrap;
 }
+
+/* --- bulk roster import ---
+   The preview table is the point of the feature, so it is styled to be read
+   carefully: skipped rows stay visible but recede, because a row that silently
+   vanished would be indistinguishable from a bug. */
+.imp-help { font-size: 12.5px; line-height: 1.65; color: var(--sub); }
+.imp-help b { color: var(--ink); }
+
+.imp-sum {
+  margin: 12px 0 8px; font-size: 13px; color: var(--sub);
+  border-left: 3px solid var(--teal2); background: var(--paper);
+  padding: 8px 11px; border-radius: 0 6px 6px 0;
+}
+.imp-sum b { font-family: var(--font-ui); font-size: 15px; color: var(--navy); }
+
+.imp-t { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 520px; }
+.imp-t th {
+  text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--sub); border-bottom: 1.5px solid var(--line-strong); padding: 6px 8px; white-space: nowrap;
+}
+.imp-t td { border-bottom: 1px solid var(--line-soft); padding: 7px 8px; vertical-align: top; }
+.imp-t td:first-child { color: var(--sub); font-variant-numeric: tabular-nums; }
+/* Not red: a name already on the roll is the importer working correctly,
+   not an error the owner has to fix. */
+.imp-skip { background: var(--paper); color: var(--sub); }
+.imp-note { font-size: 11px; line-height: 1.45; color: var(--sub); margin-top: 2px; }
+
+/* An inline editor opened under the row it belongs to, so it is obvious which
+   account is being changed. */
+.adm-edit {
+  background: var(--paper); border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: 11px 13px; margin: 8px 0 2px;
+}
