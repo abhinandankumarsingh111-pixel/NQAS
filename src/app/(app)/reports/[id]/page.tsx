@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getProfile, createClient } from "@/lib/supabase/server";
 import ReportView, { type ReportData } from "@/components/ReportView";
 import ReportComments from "@/components/ReportComments";
+import ShareReport from "@/components/ShareReport";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +37,29 @@ export default async function SingleReport({ params }: { params: { id: string } 
   const canComment = profile.role === "owner" || profile.role === "management"
     || (profile.role === "principal" && profile.campus_id === r.campus_id);
 
+  // Sending a teacher's record out of the system is narrower than reading it:
+  // a coordinator can open their own report and management can read a shared
+  // one, but forwarding it into a chat is a leadership decision. The API route
+  // enforces the same rule — this only decides whether the button is drawn.
+  const canShare = profile.role === "owner"
+    || (profile.role === "principal" && profile.campus_id === r.campus_id);
+
   const back = profile.role === "coordinator" ? "/reports" : "/dashboard";
   return (
     <div>
       <Link href={back} className="btn btn-ghost btn-sm no-print" style={{ marginBottom: 12 }}>← Back</Link>
-      <ReportView r={report} />
+      <ReportView
+        r={report}
+        share={canShare
+          ? <ShareReport
+              reportId={r.id}
+              teacher={r.teacher}
+              subject={r.subject}
+              cls={r.class}
+              date={r.date}
+            />
+          : undefined}
+      />
       <ReportComments
         reportId={r.id}
         campusId={r.campus_id}
