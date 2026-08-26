@@ -70,7 +70,12 @@ function wordHTML(r: ReportData, watermark: string) {
   </body></html>`;
 }
 
-export default function ReportView({ r }: { r: ReportData }) {
+/**
+ * `share` is the "send this as a PDF" control, passed in rather than built
+ * here: whether it appears at all depends on the viewer's role, and that is
+ * the server's decision, not this component's.
+ */
+export default function ReportView({ r, share }: { r: ReportData; share?: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
   const pupilFlagged = r.students.filter((s) => splitStatus(s, r.academic.classBand).pupilFlags.length).length;
   const undated = r.students.filter((s) => splitStatus(s, r.academic.classBand).unknown).length;
@@ -99,9 +104,10 @@ export default function ReportView({ r }: { r: ReportData }) {
   return (
     <div>
       <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <button className="btn btn-accent btn-sm" onClick={downloadWord}>⬇ Word (.doc)</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>🖨 Print / PDF</button>
-        <button className="btn btn-ghost btn-sm" onClick={copyWA}>{copied ? "✓ Copied" : "WhatsApp summary"}</button>
+        {share}
+        <button className="btn btn-ghost btn-sm" onClick={downloadWord}>⬇ Word (.doc)</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>🖨 Print</button>
+        <button className="btn btn-ghost btn-sm" onClick={copyWA}>{copied ? "✓ Copied" : "Copy summary"}</button>
         <span className="muted" style={{ marginLeft: "auto", fontSize: 11.5 }}>
           narrative: <b style={{ color: r.engine === "ai" ? "var(--teal)" : "var(--sub)" }}>{r.engine === "ai" ? "AI" : "deterministic"}</b>
         </span>
