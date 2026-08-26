@@ -252,3 +252,32 @@ export function behindTier(pct: number): string {
 export function qualityTier(pct: number): string {
   return tierLabel(pct, QUALITY_TIERS);
 }
+
+// A tier only means something once there's enough evidence to support one
+// (RATE_SUPPRESSED_BELOW, enforced by the caller) — these colours exist to
+// give that plain-language reading real visual weight instead of sitting in
+// the same navy text as everything else. Reuses the app's existing
+// teal/gold/orange/red ramp (the same one status tags already use) so this
+// reads as one visual language with the rest of the product, not a new one.
+const BEHIND_TIER_COLOR: Record<string, string> = {
+  "None behind schedule": "var(--teal)",
+  "Mostly on time": "var(--teal)",
+  "Some behind schedule": "var(--gold-dk)",
+  "Often behind schedule": "var(--orange)",
+  "Mostly behind schedule": "var(--red)",
+};
+
+const QUALITY_TIER_COLOR: Record<string, string> = {
+  "No quality concerns": "var(--teal)",
+  "Occasional concern": "var(--gold-dk)",
+  "Recurring concern": "var(--orange)",
+  "Frequent concern": "var(--red)",
+};
+
+export function behindAccent(pct: number): string {
+  return BEHIND_TIER_COLOR[behindTier(pct)];
+}
+
+export function qualityAccent(pct: number): string {
+  return QUALITY_TIER_COLOR[qualityTier(pct)];
+}

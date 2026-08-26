@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getProfile, createClient } from "@/lib/supabase/server";
 import {
   teacherMetrics, campusBaseline, DAY_STATUS_ORDER, SAMPLING_LABEL,
-  behindTier, qualityTier, RATE_SUPPRESSED_BELOW, type MetricReport,
+  behindTier, qualityTier, behindAccent, qualityAccent, RATE_SUPPRESSED_BELOW, type MetricReport,
 } from "@/lib/metrics";
 import { CLASS_BAND_LABEL, STATUS_META, type ClassBand } from "@/lib/observations";
 import RemarkComposer from "@/components/RemarkComposer";
@@ -95,6 +95,19 @@ export default async function TeacherRecord({ params }: { params: { id: string }
 
   const bands = Object.keys(m.medianDaysByBand) as ClassBand[];
 
+  // Whether there's enough evidence for the full four-tile dashboard at all —
+  // not just whether a rate inside it gets an asterisk. Below the floor the
+  // card renders a visibly smaller shape (two tiles, no bar, a short
+  // paragraph of raw counts) rather than the same four boxes with blanks in
+  // them. California's Dashboard makes the same move — 5x5 collapses to 3x5
+  // under low N — and it is the difference between a redesign and a re-skin.
+  const fullPicture = m.verifications >= RATE_SUPPRESSED_BELOW;
+  const behindColor = m.bandedCount > 0 ? behindAccent(m.behindPct!) : undefined;
+  const qualityColor = m.scoredCount > 0 ? qualityAccent(m.faultRate!) : undefined;
+  const notebookSentence = DAY_STATUS_ORDER.filter((k) => m.timeliness[k] > 0)
+    .map((k) => `${m.timeliness[k]} notebook${m.timeliness[k] === 1 ? "" : "s"} ${STATUS_META[k].tone}`)
+    .join(", ");
+
   return (
     <div>
       <div className="no-print" style={{ marginBottom: 10 }}>
@@ -141,76 +154,61 @@ export default async function TeacherRecord({ params }: { params: { id: string }
               </div>
             )}
 
-            <div className="figs">
-              <div className="fig">
-                {/* A rate needs enough notebooks behind it to mean anything. Below
-                    the floor it is suppressed to an asterisk and a raw count
-                    (New Jersey's convention) rather than shown at full precision;
-                    at and above it, a plain-language tier leads and the percentage
-                    becomes supporting detail (Ofsted's convention), not the other
-                    way around. */}
-                {m.bandedCount === 0 ? (
-                  <>
-                    <div className="fig-n">—</div>
-                    <div className="fig-l">Notebooks behind</div>
-                    <div className="fig-b">no dated notebooks yet</div>
-                  </>
-                ) : m.bandedCount < RATE_SUPPRESSED_BELOW ? (
-                  <>
-                    <div className="fig-n">*</div>
-                    <div className="fig-l">Notebooks behind</div>
-                    <div className="fig-b">too few to report a rate — {m.behindCount} of {m.bandedCount} behind</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="fig-n fig-n-tier">{behindTier(m.behindPct!)}</div>
-                    <div className="fig-l">Notebooks behind</div>
-                    <div className="fig-b">{m.behindPct}% · campus {base.behindPct ?? "—"}% over the same period</div>
-                  </>
-                )}
-              </div>
-              <div className="fig">
-                <div className="fig-n">{m.verifications}</div>
-                <div className="fig-l">Verification{m.verifications === 1 ? "" : "s"}</div>
-                <div className="fig-b">{m.notebooks} notebooks · {m.periodFrom} to {m.periodTo}</div>
-              </div>
-              <div className="fig">
-                {/* Deliberately not the word "critical": that is now the name of a
-                    day-based TAG, and this counts a different thing — ticks for a
-                    prolonged gap or no checking at all. Two meanings, one word,
-                    on the same screen would be worse than a longer label. Framed
-                    as a prompt for the next conversation, not a violation tally —
-                    the same coaching-over-evaluative framing walkthrough tools
-                    like Repertoire use. */}
-                {m.scoredCount === 0 ? (
-                  <>
-                    <div className="fig-n">—</div>
-                    <div className="fig-l">What to raise at next check-in</div>
-                    <div className="fig-b">no scored notebooks yet</div>
-                  </>
-                ) : m.scoredCount < RATE_SUPPRESSED_BELOW ? (
-                  <>
-                    <div className="fig-n">*</div>
-                    <div className="fig-l">What to raise at next check-in</div>
-                    <div className="fig-b">too few to report a rate — {m.faultyCount} of {m.scoredCount} flagged</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="fig-n fig-n-tier">{qualityTier(m.faultRate!)}</div>
-                    <div className="fig-l">What to raise at next check-in</div>
-                    <div className="fig-b">{m.faultRate}% flagged · {m.criticalCount > 0 ? `${m.criticalCount} severe` : "none severe"}</div>
-                  </>
-                )}
-              </div>
-              <div className="fig">
-                <div className="fig-n">{m.coordinators}</div>
-                <div className="fig-l">Coordinator{m.coordinators === 1 ? "" : "s"}</div>
-                <div className="fig-b">{m.coordinators === 1 ? "single source — weaker evidence" : "independently observed"}</div>
-              </div>
-            </div>
-
-            {m.bandedCount >= RATE_SUPPRESSED_BELOW ? (
+            {fullPicture ? (
               <>
+                <div className="figs">
+                  <div className="fig" style={behindColor ? { borderLeftColor: behindColor } : undefined}>
+                    {/* A tier only leads once there's a real rate behind it — this
+                        branch only runs once verifications >= the floor, but a
+                        teacher can still have zero DATED notebooks within that
+                        (missing class bands, say), so the inner guard stays. */}
+                    {m.bandedCount === 0 ? (
+                      <>
+                        <div className="fig-n">—</div>
+                        <div className="fig-l">Notebooks behind</div>
+                        <div className="fig-b">no dated notebooks yet</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="fig-n fig-n-tier" style={{ color: behindColor }}>{behindTier(m.behindPct!)}</div>
+                        <div className="fig-l">Notebooks behind</div>
+                        <div className="fig-b">{m.behindPct}% · campus {base.behindPct ?? "—"}% over the same period</div>
+                      </>
+                    )}
+                  </div>
+                  <div className="fig">
+                    <div className="fig-n">{m.verifications}</div>
+                    <div className="fig-l">Verification{m.verifications === 1 ? "" : "s"}</div>
+                    <div className="fig-b">{m.notebooks} notebooks · {m.periodFrom} to {m.periodTo}</div>
+                  </div>
+                  <div className="fig" style={qualityColor ? { borderLeftColor: qualityColor } : undefined}>
+                    {/* Deliberately not the word "critical": that is now the name of
+                        a day-based TAG, and this counts a different thing — ticks
+                        for a prolonged gap or no checking at all. Framed as a
+                        prompt for the next conversation, not a violation tally —
+                        the coaching-over-evaluative framing walkthrough tools like
+                        Repertoire use. */}
+                    {m.scoredCount === 0 ? (
+                      <>
+                        <div className="fig-n">—</div>
+                        <div className="fig-l">What to raise at next check-in</div>
+                        <div className="fig-b">no scored notebooks yet</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="fig-n fig-n-tier" style={{ color: qualityColor }}>{qualityTier(m.faultRate!)}</div>
+                        <div className="fig-l">What to raise at next check-in</div>
+                        <div className="fig-b">{m.faultRate}% flagged · {m.criticalCount > 0 ? `${m.criticalCount} severe` : "none severe"}</div>
+                      </>
+                    )}
+                  </div>
+                  <div className="fig">
+                    <div className="fig-n">{m.coordinators}</div>
+                    <div className="fig-l">Coordinator{m.coordinators === 1 ? "" : "s"}</div>
+                    <div className="fig-b">{m.coordinators === 1 ? "single source — weaker evidence" : "independently observed"}</div>
+                  </div>
+                </div>
+
                 <div className="bar" aria-label="Timeliness distribution">
                   {DAY_STATUS_ORDER.map((k) => m.timelinessPct[k] > 0 && (
                     <span key={k} style={{ width: `${m.timelinessPct[k]}%`, background: STATUS_META[k].color }} title={`${k}: ${m.timelinessPct[k]}%`} />
@@ -222,16 +220,41 @@ export default async function TeacherRecord({ params }: { params: { id: string }
                   ))}
                 </div>
               </>
-            ) : m.bandedCount > 0 && (
-              // Below the floor, a full-width solid-colour bar from one or two
-              // notebooks reads as a verdict rather than a sample. A plain
-              // sentence carries the same information without the false
-              // confidence of a 100%-red rectangle.
-              <div className="muted" style={{ fontSize: 12.5, marginTop: 2, marginBottom: 4 }}>
-                {DAY_STATUS_ORDER.filter((k) => m.timeliness[k] > 0)
-                  .map((k) => `${m.timeliness[k]} notebook${m.timeliness[k] === 1 ? "" : "s"} ${STATUS_META[k].tone}`)
-                  .join(", ")}.
-              </div>
+            ) : (
+              <>
+                {/* Below the floor, this is not the four-tile dashboard with two
+                    boxes blanked out — it is a visibly smaller shape. Only the two
+                    figures that were never rates (how much evidence exists, not
+                    what it shows) get a tile; everything else is a short paragraph
+                    of the raw counts, because a rate this thin doesn't deserve a
+                    box of its own next to ones that do. */}
+                <div className="figs">
+                  <div className="fig">
+                    <div className="fig-n">{m.verifications}</div>
+                    <div className="fig-l">Verification{m.verifications === 1 ? "" : "s"}</div>
+                    <div className="fig-b">{m.notebooks} notebooks · {m.periodFrom} to {m.periodTo}</div>
+                  </div>
+                  <div className="fig">
+                    <div className="fig-n">{m.coordinators}</div>
+                    <div className="fig-l">Coordinator{m.coordinators === 1 ? "" : "s"}</div>
+                    <div className="fig-b">{m.coordinators === 1 ? "single source — weaker evidence" : "independently observed"}</div>
+                  </div>
+                </div>
+
+                <div className="evidence-note">
+                  Not enough evidence yet for a rate.{" "}
+                  {m.bandedCount > 0 ? (
+                    <>Of {m.bandedCount} dated notebook{m.bandedCount === 1 ? "" : "s"}: {notebookSentence}.</>
+                  ) : (
+                    "No notebooks have a recorded checking date yet."
+                  )}
+                  {m.scoredCount > 0 && (
+                    <> {m.faultyCount === 0
+                      ? "None was"
+                      : `${m.faultyCount} of ${m.scoredCount} ${m.faultyCount === 1 ? "was" : "were"}`} flagged for checking quality.</>
+                  )}
+                </div>
+              </>
             )}
 
             {bands.map((b) => (
