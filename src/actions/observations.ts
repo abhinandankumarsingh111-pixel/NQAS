@@ -102,17 +102,62 @@ export async function startInCampusAction(input: {
 
   const supabase = createClient();
   const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  const header = {
+    class_name: input.className.trim() || null,
+    section: input.section.trim() || null,
+    subject: input.subject.trim() || null,
+    topic: input.topic.trim() || null,
+  };
+
+  // RESUME rather than start again.
+  //
+  // Because the draft is created on the first tap, tapping Start twice — a
+  // double-tap, or a slow connection that looks like nothing happened — used to
+  // leave two drafts on the same teacher seconds apart. That is how a teacher
+  // record ends up with two blank observations pinned to it, and those in turn
+  // blocked the record from ever being deleted.
+  //
+  // So an UNTOUCHED draft by the same principal, on the same teacher, on the
+  // same day is reused: its header is updated with whatever was typed this time
+  // (the second attempt often has more of it) and the principal is sent back
+  // into the observation they already started. A draft with any judgement
+  // recorded in it is never reused — that would silently retitle somebody's
+  // half-finished work.
+  const { data: openDrafts } = await supabase
+    .from("observations")
+    .select("id, answers, earned, strengths, improvements, final_remark")
+    .eq("observer_id", auth.user.id)
+    .eq("status", "draft")
+    .eq("observed_on", today)
+    .eq(input.facultyId ? "faculty_id" : "teacher_name", input.facultyId ?? teacher)
+    .order("created_at", { ascending: true });
+
+  const untouched = (openDrafts || []).find((o) => {
+    const a = o.answers as unknown;
+    const answered = Array.isArray(a)
+      ? a.length > 0
+      : !!a && typeof a === "object" && Object.keys(a as object).length > 0;
+    const written = [o.strengths, o.improvements, o.final_remark]
+      .some((t) => (t || "").trim().length > 0);
+    return !answered && !written && (o.earned || 0) === 0;
+  });
+
+  if (untouched) {
+    await supabase.from("observations").update(header).eq("id", untouched.id);
+    revalidatePath("/observe");
+    return { ok: true, id: untouched.id };
+  }
+
   const { data, error } = await supabase.from("observations").insert({
     campus_id: auth.profile.campus_id,
     faculty_id: input.facultyId,
     teacher_name: teacher,
     observer_id: auth.user.id,
     observer_name: auth.profile.name,
-    class_name: input.className.trim() || null,
-    section: input.section.trim() || null,
-    subject: input.subject.trim() || null,
-    topic: input.topic.trim() || null,
-    observed_on: now.toISOString().slice(0, 10),
+    ...header,
+    observed_on: today,
     observed_at: now.toTimeString().slice(0, 8),
     max_marks: rubricTotal(RUBRICS.in_campus),
   }).select("id").single();
