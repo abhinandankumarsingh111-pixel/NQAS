@@ -1,0 +1,105 @@
+/* ============================================================
+   STAFF ACTIVITY — who filed what, and who has been missed.
+
+   One colour rule governs this whole file: nothing here goes red.
+   These figures describe colleagues, and a zero in a holiday week is
+   not a failure. Volume is drawn in one flat navy for everybody, so
+   the bars compare lengths and nothing else; coverage is teal because
+   it is the figure worth moving. Judgement is left to the reader.
+   ============================================================ */
+
+/* --- period toggle --- */
+.per-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.per-tab {
+  font-family: var(--font-ui); font-size: 12.5px; font-weight: 600;
+  /* 44px of touch target on a phone, per WCAG's target-size guidance —
+     these are tapped with a thumb on a mid-range Android, not clicked. */
+  min-height: 44px; display: inline-flex; align-items: center;
+  padding: 0 15px; border-radius: 8px; text-decoration: none;
+  border: 1.5px solid var(--line-strong); background: #fff; color: var(--navy);
+}
+.per-tab:hover { border-color: var(--teal2); }
+.per-tab.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+.per-range {
+  font-size: 12.5px; color: var(--sub); margin: -4px 0 14px;
+  font-variant-numeric: tabular-nums;
+}
+/* The period is not over yet, so its totals are not final. Said in words —
+   a lighter shade alone would not survive a photocopy or a bright screen. */
+.per-live { font-style: italic; color: var(--gold-dk); }
+
+/* --- coverage: the headline --- */
+.cov {
+  border: 1.5px solid var(--line-strong); border-left: 3px solid var(--teal2);
+  border-radius: 8px; padding: 11px 13px; margin-bottom: 15px; background: var(--paper);
+}
+.cov-head { font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.cov-head b { font-family: var(--font-ui); font-size: 16px; font-weight: 800; color: var(--navy); }
+.cov-bar {
+  height: 10px; border-radius: 5px; background: var(--chip);
+  border: 1px solid var(--line-strong); margin: 8px 0 7px; overflow: hidden;
+}
+.cov-bar span { display: block; height: 100%; background: var(--teal2); }
+.cov-note { font-size: 12px; line-height: 1.6; color: var(--sub); }
+.cov-note b { color: var(--ink); }
+
+/* --- one row per person --- */
+.act-list { display: flex; flex-direction: column; }
+.act-row {
+  display: grid; grid-template-columns: minmax(110px, 1fr) minmax(130px, 1.3fr);
+  gap: 3px 14px; align-items: center;
+  padding: 10px 2px; border-bottom: 1px solid var(--line-soft);
+}
+.act-row:last-child { border-bottom: none; }
+.act-name { font-size: 13.5px; font-weight: 600; color: var(--navy); min-width: 0; }
+
+.act-fig { display: flex; align-items: center; gap: 10px; }
+.act-bar {
+  flex: 1; height: 12px; border-radius: 6px; background: var(--chip);
+  border: 1px solid var(--line-strong); overflow: hidden; min-width: 40px;
+}
+/* Flat navy for everyone. Colouring the bar by how much someone did would be
+   a traffic light on a colleague's name, which is the thing this design is
+   built to avoid. */
+.act-bar span { display: block; height: 100%; background: var(--navy); }
+.act-n {
+  font-family: var(--font-ui); font-size: 17px; font-weight: 800; color: var(--navy);
+  font-variant-numeric: tabular-nums; min-width: 26px; text-align: right;
+}
+.act-n-zero { color: var(--sub); font-weight: 700; }
+
+.act-sub { grid-column: 1 / -1; font-size: 11.5px; line-height: 1.5; color: var(--sub); }
+
+.act-foot {
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft);
+  font-size: 11.5px; line-height: 1.6; color: var(--sub);
+}
+
+@media (max-width: 560px) {
+  .act-row { grid-template-columns: 1fr; gap: 5px; }
+  .act-sub { grid-column: 1; }
+}
+
+/* --- labelled proportional bars (campus breakdown, status distribution) ---
+   Previously each of these was a hand-tuned run of inline styles with a fixed
+   label width, so the two sat side by side at slightly different sizes and
+   both crushed the label column on a narrow phone. One grid, used by both. */
+.dist-h {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--sub); margin-bottom: 9px;
+}
+.dist-row {
+  display: grid; grid-template-columns: minmax(84px, 36%) 1fr auto;
+  align-items: center; gap: 9px; margin-bottom: 7px;
+}
+.dist-l { font-size: 12px; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere; }
+.dist-bar {
+  display: block; height: 14px; border-radius: 4px;
+  background: var(--chip); border: 1px solid var(--line-strong); overflow: hidden;
+}
+.dist-bar > span { display: block; height: 100%; }
+.dist-n {
+  font-size: 12.5px; font-weight: 600; color: var(--sub);
+  font-variant-numeric: tabular-nums; min-width: 22px; text-align: right;
+}

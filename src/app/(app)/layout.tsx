@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getProfile } from "@/lib/supabase/server";
 import { logoutAction } from "@/actions";
+import NavTabs from "@/components/NavTabs";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile } = await getProfile();
@@ -43,9 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </header>
       <div className="shell">
-        <nav className="tabs no-print">
-          {nav.map((n) => <Link key={n.href} href={n.href} className="tab">{n.label}</Link>)}
-        </nav>
+        <NavTabs items={nav} />
         {children}
       </div>
       <footer className="app-footer no-print">
