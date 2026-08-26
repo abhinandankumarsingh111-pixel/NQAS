@@ -1,10 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getProfile, createClient } from "@/lib/supabase/server";
-import {
-  teacherMetrics, campusBaseline, DAY_STATUS_ORDER, SAMPLING_LABEL,
-  behindTier, qualityTier, behindAccent, qualityAccent, RATE_SUPPRESSED_BELOW, type MetricReport,
-} from "@/lib/metrics";
+import { teacherMetrics, campusBaseline, DAY_STATUS_ORDER, SAMPLING_LABEL, type MetricReport } from "@/lib/metrics";
 import { CLASS_BAND_LABEL, STATUS_META, type ClassBand } from "@/lib/observations";
 import RemarkComposer from "@/components/RemarkComposer";
 import AcknowledgeButton from "@/components/AcknowledgeButton";
@@ -95,19 +92,6 @@ export default async function TeacherRecord({ params }: { params: { id: string }
 
   const bands = Object.keys(m.medianDaysByBand) as ClassBand[];
 
-  // Whether there's enough evidence for the full four-tile dashboard at all —
-  // not just whether a rate inside it gets an asterisk. Below the floor the
-  // card renders a visibly smaller shape (two tiles, no bar, a short
-  // paragraph of raw counts) rather than the same four boxes with blanks in
-  // them. California's Dashboard makes the same move — 5x5 collapses to 3x5
-  // under low N — and it is the difference between a redesign and a re-skin.
-  const fullPicture = m.verifications >= RATE_SUPPRESSED_BELOW;
-  const behindColor = m.bandedCount > 0 ? behindAccent(m.behindPct!) : undefined;
-  const qualityColor = m.scoredCount > 0 ? qualityAccent(m.faultRate!) : undefined;
-  const notebookSentence = DAY_STATUS_ORDER.filter((k) => m.timeliness[k] > 0)
-    .map((k) => `${m.timeliness[k]} notebook${m.timeliness[k] === 1 ? "" : "s"} ${STATUS_META[k].tone}`)
-    .join(", ");
-
   return (
     <div>
       <div className="no-print" style={{ marginBottom: 10 }}>
@@ -139,7 +123,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
 
       {/* ---------------- objective figures ---------------- */}
       <div className="card">
-        <div className="card-h"><h2>Notebook Checking</h2></div>
+        <div className="card-h"><h2>Copy correction</h2></div>
 
         {m.verifications === 0 ? (
           <div className="empty"><b>No verifications recorded yet.</b>
@@ -154,108 +138,45 @@ export default async function TeacherRecord({ params }: { params: { id: string }
               </div>
             )}
 
-            {fullPicture ? (
-              <>
-                <div className="figs">
-                  <div className="fig" style={behindColor ? { borderLeftColor: behindColor } : undefined}>
-                    {/* A tier only leads once there's a real rate behind it — this
-                        branch only runs once verifications >= the floor, but a
-                        teacher can still have zero DATED notebooks within that
-                        (missing class bands, say), so the inner guard stays. */}
-                    {m.bandedCount === 0 ? (
-                      <>
-                        <div className="fig-n">—</div>
-                        <div className="fig-l">Notebooks behind</div>
-                        <div className="fig-b">no dated notebooks yet</div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="fig-n fig-n-tier" style={{ color: behindColor }}>{behindTier(m.behindPct!)}</div>
-                        <div className="fig-l">Notebooks behind</div>
-                        <div className="fig-b">{m.behindPct}% · campus {base.behindPct ?? "—"}% over the same period</div>
-                      </>
-                    )}
-                  </div>
-                  <div className="fig">
-                    <div className="fig-n">{m.verifications}</div>
-                    <div className="fig-l">Verification{m.verifications === 1 ? "" : "s"}</div>
-                    <div className="fig-b">{m.notebooks} notebooks · {m.periodFrom} to {m.periodTo}</div>
-                  </div>
-                  <div className="fig" style={qualityColor ? { borderLeftColor: qualityColor } : undefined}>
-                    {/* Deliberately not the word "critical": that is now the name of
-                        a day-based TAG, and this counts a different thing — ticks
-                        for a prolonged gap or no checking at all. Framed as a
-                        prompt for the next conversation, not a violation tally —
-                        the coaching-over-evaluative framing walkthrough tools like
-                        Repertoire use. */}
-                    {m.scoredCount === 0 ? (
-                      <>
-                        <div className="fig-n">—</div>
-                        <div className="fig-l">What to raise at next check-in</div>
-                        <div className="fig-b">no scored notebooks yet</div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="fig-n fig-n-tier" style={{ color: qualityColor }}>{qualityTier(m.faultRate!)}</div>
-                        <div className="fig-l">What to raise at next check-in</div>
-                        <div className="fig-b">{m.faultRate}% flagged · {m.criticalCount > 0 ? `${m.criticalCount} severe` : "none severe"}</div>
-                      </>
-                    )}
-                  </div>
-                  <div className="fig">
-                    <div className="fig-n">{m.coordinators}</div>
-                    <div className="fig-l">Coordinator{m.coordinators === 1 ? "" : "s"}</div>
-                    <div className="fig-b">{m.coordinators === 1 ? "single source — weaker evidence" : "independently observed"}</div>
-                  </div>
+            <div className="figs">
+              <div className="fig">
+                <div className="fig-n">{m.behindPct ?? "—"}<small>%</small></div>
+                <div className="fig-l">Notebooks behind</div>
+                <div className="fig-b">
+                  campus {base.behindPct ?? "—"}% over the same period
                 </div>
+              </div>
+              <div className="fig">
+                <div className="fig-n">{m.verifications}</div>
+                <div className="fig-l">Verifications</div>
+                <div className="fig-b">{m.notebooks} notebooks · {m.periodFrom} to {m.periodTo}</div>
+              </div>
+              <div className="fig">
+                <div className="fig-n">{m.faultRate ?? "—"}<small>%</small></div>
+                <div className="fig-l">Checking-quality flags</div>
+                {/* Deliberately not the word "critical": that is now the name of a
+                    day-based TAG, and this counts a different thing — ticks for a
+                    prolonged gap or no checking at all. Two meanings, one word,
+                    on the same screen would be worse than a longer label. */}
+                <div className="fig-b">{m.criticalCount > 0 ? `${m.criticalCount} severe` : "none severe"}</div>
+              </div>
+              <div className="fig">
+                <div className="fig-n">{m.coordinators}</div>
+                <div className="fig-l">Coordinator{m.coordinators === 1 ? "" : "s"}</div>
+                <div className="fig-b">{m.coordinators === 1 ? "single source — weaker evidence" : "independently observed"}</div>
+              </div>
+            </div>
 
-                <div className="bar" aria-label="Timeliness distribution">
-                  {DAY_STATUS_ORDER.map((k) => m.timelinessPct[k] > 0 && (
-                    <span key={k} style={{ width: `${m.timelinessPct[k]}%`, background: STATUS_META[k].color }} title={`${k}: ${m.timelinessPct[k]}%`} />
-                  ))}
-                </div>
-                <div className="bar-key">
-                  {DAY_STATUS_ORDER.map((k) => (
-                    <span key={k}><i style={{ background: STATUS_META[k].color }} />{k} {m.timelinessPct[k]}%</span>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Below the floor, this is not the four-tile dashboard with two
-                    boxes blanked out — it is a visibly smaller shape. Only the two
-                    figures that were never rates (how much evidence exists, not
-                    what it shows) get a tile; everything else is a short paragraph
-                    of the raw counts, because a rate this thin doesn't deserve a
-                    box of its own next to ones that do. */}
-                <div className="figs">
-                  <div className="fig">
-                    <div className="fig-n">{m.verifications}</div>
-                    <div className="fig-l">Verification{m.verifications === 1 ? "" : "s"}</div>
-                    <div className="fig-b">{m.notebooks} notebooks · {m.periodFrom} to {m.periodTo}</div>
-                  </div>
-                  <div className="fig">
-                    <div className="fig-n">{m.coordinators}</div>
-                    <div className="fig-l">Coordinator{m.coordinators === 1 ? "" : "s"}</div>
-                    <div className="fig-b">{m.coordinators === 1 ? "single source — weaker evidence" : "independently observed"}</div>
-                  </div>
-                </div>
-
-                <div className="evidence-note">
-                  Not enough evidence yet for a rate.{" "}
-                  {m.bandedCount > 0 ? (
-                    <>Of {m.bandedCount} dated notebook{m.bandedCount === 1 ? "" : "s"}: {notebookSentence}.</>
-                  ) : (
-                    "No notebooks have a recorded checking date yet."
-                  )}
-                  {m.scoredCount > 0 && (
-                    <> {m.faultyCount === 0
-                      ? "None was"
-                      : `${m.faultyCount} of ${m.scoredCount} ${m.faultyCount === 1 ? "was" : "were"}`} flagged for checking quality.</>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="bar" aria-label="Timeliness distribution">
+              {DAY_STATUS_ORDER.map((k) => m.timelinessPct[k] > 0 && (
+                <span key={k} style={{ width: `${m.timelinessPct[k]}%`, background: STATUS_META[k].color }} title={`${k}: ${m.timelinessPct[k]}%`} />
+              ))}
+            </div>
+            <div className="bar-key">
+              {DAY_STATUS_ORDER.map((k) => (
+                <span key={k}><i style={{ background: STATUS_META[k].color }} />{k} {m.timelinessPct[k]}%</span>
+              ))}
+            </div>
 
             {bands.map((b) => (
               <div key={b} className="muted" style={{ fontSize: 12, marginTop: 6 }}>
@@ -266,7 +187,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
 
             <div className="muted" style={{ fontSize: 11.5, marginTop: 12, lineHeight: 1.65 }}>
               Timeliness is measured against the delay threshold for each class band, so primary and senior
-              teaching are compared fairly. Only notebook checking counts here — student handwriting, index and
+              teaching are compared fairly. Only copy correction counts here — student handwriting, index and
               presentation appear on the reports below but are never counted against a teacher.
               {m.unscored > 0 && <> {m.unscored} notebook{m.unscored === 1 ? "" : "s"} predate observation capture and are excluded from the flag rate.</>}
               {m.undated > 0 && <> {m.undated} notebook{m.undated === 1 ? " has" : "s have"} no recorded checking date, so {m.undated === 1 ? "it is" : "they are"} excluded from these figures rather than counted against her.</>}
@@ -314,7 +235,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
           <div className="muted" style={{ fontSize: 11.5, marginTop: 10, lineHeight: 1.6 }}>
             Lesson observations conducted by the principal. Scored against the same
             rubric at every campus, so one teacher&rsquo;s figures can be read
-            against another&rsquo;s. Separate from notebook checking above, which
+            against another&rsquo;s. Separate from notebook verification above, which
             measures copy correction only.
           </div>
         </div>
@@ -385,7 +306,7 @@ export default async function TeacherRecord({ params }: { params: { id: string }
       <div className="muted print-only" style={{ fontSize: 11, marginTop: 10 }}>
         Krishna Vikash Group of CBSE Schools — teacher record for {f.name}, {campus?.name}.
         Covers {m.verifications} verification{m.verifications === 1 ? "" : "s"} ({m.periodFrom} to {m.periodTo}).
-        Figures reflect notebook-checking timeliness and quality only.
+        Figures reflect copy-correction timeliness and checking quality only.
       </div>
     </div>
   );

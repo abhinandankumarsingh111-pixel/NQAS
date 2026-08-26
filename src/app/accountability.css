@@ -43,22 +43,8 @@
 .fig { border: 1px solid var(--line-soft); border-left: 3px solid var(--gold); border-radius: 8px; padding: 10px 12px; background: var(--paper); }
 .fig-n { font-family: var(--font-ui); font-size: 23px; font-weight: 700; color: var(--navy); line-height: 1.1; }
 .fig-n small { font-size: 13px; font-weight: 600; }
-/* A plain-language tier ("Mostly on time") leading a tile instead of a raw
-   number. Bold and coloured by tier (set inline, per teacher) so it carries
-   real visual weight of its own rather than reading as a smaller, quieter
-   version of the number it replaced. */
-.fig-n-tier { font-size: 18px; font-weight: 800; line-height: 1.2; }
 .fig-l { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--sub); margin-top: 3px; }
 .fig-b { font-size: 11.5px; color: var(--sub); margin-top: 4px; line-height: 1.45; }
-
-/* The low-evidence replacement for the figs grid + bar: plain counts in
-   prose, neutral toned (not orange, so it doesn't compete with the
-   "Provisional" notice sitting right above it — that already carries the
-   warning; this is just what's actually known so far). */
-.evidence-note {
-  border-left: 3px solid var(--line); background: var(--paper);
-  padding: 10px 12px; font-size: 13px; line-height: 1.65; margin-bottom: 14px; border-radius: 0 6px 6px 0;
-}
 
 .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--chip); }
 .bar span { display: block; }
